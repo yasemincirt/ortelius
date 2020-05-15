@@ -66,7 +66,7 @@ func getNextMessage(ctx context.Context, r *kafka.Reader) (*Message, error) {
 	msg, err := r.ReadMessage(ctx)
 	if err != nil {
 		return nil, err
-	}
+	}``
 
 	// Extract chainID from topic
 	chainID, err := ids.FromString(msg.Topic)
