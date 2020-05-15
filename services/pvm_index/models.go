@@ -34,3 +34,7 @@ const (
 
 type BlockType uint8
 type TransactionType uint8
+
+type Validator struct {
+	TransactionType
+}

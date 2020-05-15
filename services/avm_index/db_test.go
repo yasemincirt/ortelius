@@ -147,7 +147,7 @@ func TestIndexVectors(t *testing.T) {
 	assertAllOutputsCorrect(t, db, nil)
 
 	// Add each test vector tx
-	acc := services.FanOutService{idx}
+	acc := services.FanOutIndexer{idx}
 	for i, v := range createTestVectors() {
 		err := acc.Add(&message{
 			id:        ids.NewID(hashing.ComputeHash256Array(v.serializedTx)),

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -149,6 +148,5 @@ func (c *StreamProcessorManager) runWorker(chainID ids.ID) error {
 	for !c.isStopping() {
 		processNextMessage()
 	}
-	fmt.Println("stopping...?")
 	return nil
 }

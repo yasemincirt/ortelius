@@ -200,9 +200,9 @@ func (r *DB) Aggregate(params AggregateParams) (*AggregatesHistogram, error) {
 
 	var startTS int64
 	timesForInterval := func(intervalIdx int) (time.Time, time.Time) {
-		// An interval's start time is its index time the interval size, plus the
-		// starting time. The end time is (interval size - 1) seconds after the
-		// start time.
+		// An interval's start Time is its index Time the interval size, plus the
+		// starting Time. The end Time is (interval size - 1) seconds after the
+		// start Time.
 		startTS = params.StartTime.Unix() + (int64(intervalIdx) * intervalSeconds)
 		return time.Unix(startTS, 0).UTC(),
 			time.Unix(startTS+intervalSeconds-1, 0).UTC()

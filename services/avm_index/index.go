@@ -56,7 +56,7 @@ func newForConnections(conns *services.Connections, networkID uint32, chainID id
 	}, nil
 }
 
-func (i *Index) Add(ingestable services.Ingestable) error {
+func (i *Index) Index(ingestable services.Indexable) error {
 	// Parse into a tx
 	snowstormTx, err := i.vm.ParseTx(ingestable.Body())
 	if err != nil {
@@ -68,12 +68,12 @@ func (i *Index) Add(ingestable services.Ingestable) error {
 		return errors.New("tx must be an UniqueTx")
 	}
 
-	if err := i.db.AddTx(tx, ingestable.Timestamp(), ingestable.Body()); err != nil {
+	if err := i.db.Index(tx, ingestable); err != nil {
 		return err
 	}
 
 	if i.cache != nil {
-		if err := i.cache.AddTx(ingestable.ID(), ingestable.Body()); err != nil {
+		if err := i.cache.Index(ingestable); err != nil {
 			return err
 		}
 	}

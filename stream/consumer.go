@@ -18,7 +18,7 @@ import (
 // consumer takes events from Kafka and sends them to a service
 type consumer struct {
 	reader  *kafka.Reader
-	service services.FanOutService
+	service services.FanOutIndexer
 }
 
 // NewConsumer creates a consumer for the given config
@@ -66,7 +66,7 @@ func getNextMessage(ctx context.Context, r *kafka.Reader) (*Message, error) {
 	msg, err := r.ReadMessage(ctx)
 	if err != nil {
 		return nil, err
-	}``
+	}
 
 	// Extract chainID from topic
 	chainID, err := ids.FromString(msg.Topic)
@@ -94,7 +94,7 @@ func getNextMessage(ctx context.Context, r *kafka.Reader) (*Message, error) {
 	}, nil
 }
 
-func createServices(conf cfg.ServiceConfig, networkID uint32, chainID ids.ID) (services.FanOutService, error) {
+func createServices(conf cfg.ServiceConfig, networkID uint32, chainID ids.ID) (services.FanOutIndexer, error) {
 	// Create and bootstrap an AVMIndex
 	avmIndex, err := avm_index.New(conf, networkID, chainID)
 	if err != nil {
@@ -106,5 +106,5 @@ func createServices(conf cfg.ServiceConfig, networkID uint32, chainID ids.ID) (s
 		return nil, err
 	}
 
-	return services.FanOutService{avmIndex}, nil
+	return services.FanOutIndexer{avmIndex}, nil
 }

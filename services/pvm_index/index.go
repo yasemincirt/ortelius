@@ -51,7 +51,7 @@ func newForConnections(conns *services.Connections, chainID ids.ID) (*Index, err
 	}, nil
 }
 
-func (i *Index) Ingest(ingestable services.Ingestable) error {
+func (i *Index) Ingest(ingestable services.Indexable) error {
 	return i.db.Ingest(ingestable)
 }
 
