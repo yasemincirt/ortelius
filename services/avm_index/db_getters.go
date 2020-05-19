@@ -14,6 +14,8 @@ import (
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/gocraft/dbr"
+
+	"github.com/ava-labs/ortelius/services/models"
 )
 
 const (
@@ -251,7 +253,7 @@ func (r *DB) Aggregate(params AggregateParams) (*AggregatesHistogram, error) {
 		aggs.Intervals = append(aggs.Intervals, interval)
 	}
 	// Add total aggregated token amounts
-	aggs.Aggregates.TransactionVolume = tokenAmount(totalVolume.String())
+	aggs.Aggregates.TransactionVolume = TokenAmount(totalVolume.String())
 
 	// Add any missing trailing intervals
 	aggs.Intervals = padTo(aggs.Intervals, requestedIntervalCount)
@@ -455,8 +457,8 @@ func (r *DB) ListOutputs(params *ListOutputsParams) (*OutputList, error) {
 		return &OutputList{Outputs: outputs}, nil
 	}
 
-	outputIDs := make([]stringID, len(outputs))
-	outputMap := make(map[stringID]*Output, len(outputs))
+	outputIDs := make([]models.StringID, len(outputs))
+	outputMap := make(map[models.StringID]*Output, len(outputs))
 	for i, output := range outputs {
 		outputIDs[i] = output.ID
 		outputMap[output.ID] = output
@@ -539,7 +541,7 @@ func (r *DB) dressTransactions(db dbr.SessionRunner, txs []*Transaction) error {
 	}
 
 	// Get the IDs returned so we can get Input/Output data
-	txIDs := make([]stringID, len(txs))
+	txIDs := make([]models.StringID, len(txs))
 	for i, tx := range txs {
 		txIDs[i] = tx.ID
 	}
@@ -574,13 +576,13 @@ func (r *DB) dressTransactions(db dbr.SessionRunner, txs []*Transaction) error {
 	}
 
 	// Create maps for all Transaction outputs and Input Transaction outputs
-	outputMap := map[stringID]*Output{}
+	outputMap := map[models.StringID]*Output{}
 
-	inputsMap := map[stringID][]*Input{}
-	inputTotalsMap := map[stringID]AssetTokenCounts{}
+	inputsMap := map[models.StringID][]*Input{}
+	inputTotalsMap := map[models.StringID]AssetTokenCounts{}
 
-	outputsMap := map[stringID][]*Output{}
-	outputTotalsMap := map[stringID]AssetTokenCounts{}
+	outputsMap := map[models.StringID][]*Output{}
+	outputTotalsMap := map[models.StringID]AssetTokenCounts{}
 
 	for _, out := range outputs {
 		outputMap[out.ID] = out
