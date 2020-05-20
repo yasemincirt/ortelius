@@ -16,6 +16,7 @@ import (
 	"github.com/gocraft/dbr"
 
 	"github.com/ava-labs/ortelius/services/models"
+	"github.com/ava-labs/ortelius/services/params"
 )
 
 const (
@@ -27,35 +28,35 @@ var (
 	ErrFailedToParseStringAsBigInt    = errors.New("failed to parse string to big.Int")
 )
 
-func (r *DB) Search(params SearchParams) (*SearchResults, error) {
+func (r *DB) Search(p SearchParams) (*SearchResults, error) {
 	// Get search results for each class of object
 	transactionResults, err := r.ListTransactions(&ListTransactionsParams{
-		ListParams: params.ListParams,
-		Query:      params.Query,
+		ListParams: p.ListParams,
+		Query:      p.Query,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	assetResults, err := r.ListAssets(&ListAssetsParams{
-		ListParams: params.ListParams,
-		Query:      params.Query,
+		ListParams: p.ListParams,
+		Query:      p.Query,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	addressResults, err := r.ListAddresses(&ListAddressesParams{
-		ListParams: params.ListParams,
-		Query:      params.Query,
+		ListParams: p.ListParams,
+		Query:      p.Query,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	outputResults, err := r.ListOutputs(&ListOutputsParams{
-		ListParams: params.ListParams,
-		Query:      params.Query,
+		ListParams: p.ListParams,
+		Query:      p.Query,
 	})
 	if err != nil {
 		return nil, err
@@ -63,8 +64,8 @@ func (r *DB) Search(params SearchParams) (*SearchResults, error) {
 
 	// Build overall SearchResults object from our pieces
 	returnedResultCount := len(assetResults.Assets) + len(addressResults.Addresses) + len(transactionResults.Transactions) + len(outputResults.Outputs)
-	if returnedResultCount > PaginationMaxLimit {
-		returnedResultCount = PaginationMaxLimit
+	if returnedResultCount > params.PaginationMaxLimit {
+		returnedResultCount = params.PaginationMaxLimit
 	}
 	results := &SearchResults{
 		// The overall count is the sum of the counts for each class
@@ -261,24 +262,24 @@ func (r *DB) Aggregate(params AggregateParams) (*AggregatesHistogram, error) {
 	return aggs, nil
 }
 
-func (r *DB) ListTransactions(params *ListTransactionsParams) (*TransactionList, error) {
+func (r *DB) ListTransactions(p *ListTransactionsParams) (*TransactionList, error) {
 	db := r.newSession("get_transactions")
 
 	columns := []string{"avm_transactions.id", "avm_transactions.chain_id", "avm_transactions.type", "avm_transactions.created_at", "avm_transactions.json_serialization AS raw_message"}
-	scoreExpression, err := r.newScoreExpressionForFields(params.Query, []string{
+	scoreExpression, err := r.newScoreExpressionForFields(p.Query, []string{
 		"avm_transactions.id",
 	}...)
 	if err != nil {
 		return nil, err
 	}
 
-	if params.Query != "" {
+	if p.Query != "" {
 		columns = append(columns, scoreExpression+" AS score")
 	}
 
 	// Load the base transactions
 	txs := []*Transaction{}
-	builder := params.Apply(db.
+	builder := p.Apply(db.
 		Select(columns...).
 		From("avm_transactions").
 		Where("chain_id = ?", r.chainID.String()))
@@ -291,10 +292,10 @@ func (r *DB) ListTransactions(params *ListTransactionsParams) (*TransactionList,
 		return nil, err
 	}
 
-	count := uint64(params.Offset) + uint64(len(txs))
-	if len(txs) >= params.Limit {
-		params.ListParams = ListParams{}
-		err = params.Apply(db.
+	count := uint64(p.Offset) + uint64(len(txs))
+	if len(txs) >= p.Limit {
+		p.ListParams = params.ListParams{}
+		err = p.Apply(db.
 			Select("COUNT(avm_transactions.id)").
 			From("avm_transactions").
 			Where("chain_id = ?", r.chainID.String())).
@@ -312,10 +313,10 @@ func (r *DB) ListTransactions(params *ListTransactionsParams) (*TransactionList,
 	return &TransactionList{ListMetadata{count}, txs}, nil
 }
 
-func (r *DB) ListAssets(params *ListAssetsParams) (*AssetList, error) {
+func (r *DB) ListAssets(p *ListAssetsParams) (*AssetList, error) {
 	columns := []string{"avm_assets.*"}
 
-	scoreExpression, err := r.newScoreExpressionForFields(params.Query, []string{
+	scoreExpression, err := r.newScoreExpressionForFields(p.Query, []string{
 		"avm_assets.symbol",
 		"avm_assets.name",
 		"avm_assets.id",
@@ -324,13 +325,13 @@ func (r *DB) ListAssets(params *ListAssetsParams) (*AssetList, error) {
 		return nil, err
 	}
 
-	if params.Query != "" {
+	if p.Query != "" {
 		columns = append(columns, scoreExpression+" AS score")
 	}
 
 	db := r.newSession("list_assets")
 	assets := []*Asset{}
-	builder := params.Apply(db.
+	builder := p.Apply(db.
 		Select(columns...).
 		From("avm_assets").
 		Where("chain_id = ?", r.chainID.String()))
@@ -343,10 +344,10 @@ func (r *DB) ListAssets(params *ListAssetsParams) (*AssetList, error) {
 		return nil, err
 	}
 
-	count := uint64(params.Offset) + uint64(len(assets))
-	if len(assets) >= params.Limit {
-		params.ListParams = ListParams{}
-		err = params.Apply(db.
+	count := uint64(p.Offset) + uint64(len(assets))
+	if len(assets) >= p.Limit {
+		p.ListParams = params.ListParams{}
+		err = p.Apply(db.
 			Select("COUNT(avm_assets.id)").
 			From("avm_assets").
 			Where("chain_id = ?", r.chainID.String())).
@@ -359,7 +360,7 @@ func (r *DB) ListAssets(params *ListAssetsParams) (*AssetList, error) {
 	return &AssetList{ListMetadata{count}, assets}, err
 }
 
-func (r *DB) ListAddresses(params *ListAddressesParams) (*AddressList, error) {
+func (r *DB) ListAddresses(p *ListAddressesParams) (*AddressList, error) {
 	db := r.newSession("list_addresses")
 
 	columns := []string{
@@ -374,19 +375,19 @@ func (r *DB) ListAddresses(params *ListAddressesParams) (*AddressList, error) {
 		"COALESCE(SUM(CASE WHEN avm_outputs.redeeming_transaction_id = '' THEN 1 ELSE 0 END), 0) AS utxo_count",
 	}
 
-	scoreExpression, err := r.newScoreExpressionForFields(params.Query, []string{
+	scoreExpression, err := r.newScoreExpressionForFields(p.Query, []string{
 		"avm_output_addresses.address",
 	}...)
 	if err != nil {
 		return nil, err
 	}
 
-	if params.Query != "" {
+	if p.Query != "" {
 		columns = append(columns, scoreExpression+" AS score")
 	}
 
 	addresses := []*Address{}
-	builder := params.Apply(db.
+	builder := p.Apply(db.
 		Select(columns...).
 		From("avm_output_addresses").
 		LeftJoin("addresses", "addresses.address = avm_output_addresses.address").
@@ -403,10 +404,10 @@ func (r *DB) ListAddresses(params *ListAddressesParams) (*AddressList, error) {
 		return nil, err
 	}
 
-	count := uint64(params.Offset) + uint64(len(addresses))
-	if len(addresses) >= params.Limit {
-		params.ListParams = ListParams{}
-		err = params.Apply(db.
+	count := uint64(p.Offset) + uint64(len(addresses))
+	if len(addresses) >= p.Limit {
+		p.ListParams = params.ListParams{}
+		err = p.Apply(db.
 			Select("COUNT(avm_output_addresses.address)").
 			From("avm_output_addresses").
 			LeftJoin("addresses", "addresses.address = avm_output_addresses.address").
@@ -423,22 +424,22 @@ func (r *DB) ListAddresses(params *ListAddressesParams) (*AddressList, error) {
 	return &AddressList{ListMetadata{count}, addresses}, nil
 }
 
-func (r *DB) ListOutputs(params *ListOutputsParams) (*OutputList, error) {
+func (r *DB) ListOutputs(p *ListOutputsParams) (*OutputList, error) {
 	columns := []string{"avm_outputs.*"}
 
-	scoreExpression, err := r.newScoreExpressionForFields(params.Query, []string{
+	scoreExpression, err := r.newScoreExpressionForFields(p.Query, []string{
 		"avm_outputs.id",
 	}...)
 	if err != nil {
 		return nil, err
 	}
 
-	if params.Query != "" {
+	if p.Query != "" {
 		columns = append(columns, scoreExpression+" AS score")
 	}
 
 	db := r.newSession("list_transaction_outputs")
-	builder := params.Apply(db.
+	builder := p.Apply(db.
 		Select(columns...).
 		From("avm_outputs").
 		LeftJoin("avm_transactions", "avm_transactions.id = avm_outputs.transaction_id").
@@ -482,10 +483,10 @@ func (r *DB) ListOutputs(params *ListOutputsParams) (*OutputList, error) {
 		output.Addresses = append(output.Addresses, address.Address)
 	}
 
-	count := uint64(params.Offset) + uint64(len(outputs))
-	if len(outputs) >= params.Limit {
-		params.ListParams = ListParams{}
-		err = params.Apply(db.
+	count := uint64(p.Offset) + uint64(len(outputs))
+	if len(outputs) >= p.Limit {
+		p.ListParams = params.ListParams{}
+		err = p.Apply(db.
 			Select("COUNT(avm_outputs.id)").
 			From("avm_outputs").
 			LeftJoin("avm_transactions", "avm_transactions.id = avm_outputs.transaction_id").

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/logging"
 	"github.com/segmentio/kafka-go"
 	"nanomsg.org/go/mangos/v2"
@@ -26,7 +25,7 @@ var (
 	ErrUnknownStreamProcessorType = errors.New("unknown stream processor type")
 )
 
-type streamProcessorFactory func(cfg.ClientConfig, uint32, ids.ID) (stream.Processor, error)
+type streamProcessorFactory func(cfg.ClientConfig, uint32, cfg.ChainConfig) (stream.Processor, error)
 
 // StreamProcessorManager reads or writes from/to the event stream backend
 type StreamProcessorManager struct {
@@ -62,19 +61,19 @@ func newStreamProcessorManager(conf cfg.ClientConfig, factory streamProcessorFac
 func (c *StreamProcessorManager) Listen() error {
 	// Create a backend for each chain we want to watch and wait for them to exit
 	workerManagerWG := &sync.WaitGroup{}
-	for chainID := range c.conf.ChainsConfig {
+	for _, chainConfig := range c.conf.ChainsConfig {
 		workerManagerWG.Add(1)
-		go func(chainID ids.ID) {
+		go func(chainConfig cfg.ChainConfig) {
 			defer workerManagerWG.Done()
-			c.log.Info("Started worker manager for chain %s", chainID)
+			c.log.Info("Started worker manager for chain %s", chainConfig.ID)
 
 			// Keep running the worker until it exits without an error
-			for err := c.runWorker(chainID); err != nil; err = c.runWorker(chainID) {
+			for err := c.runWorker(chainConfig); err != nil; err = c.runWorker(chainConfig) {
 				c.log.Error("Error running worker: %s", err.Error())
 				<-time.After(10 * time.Second)
 			}
-			c.log.Info("Exiting worker manager for chain %s", chainID)
-		}(chainID)
+			c.log.Info("Exiting worker manager for chain %s", chainConfig.ID)
+		}(chainConfig)
 	}
 
 	// Wait for all workers to finish without an error
@@ -103,17 +102,17 @@ func (c *StreamProcessorManager) isStopping() bool {
 
 // runWorker starts the processing loop for the backend and closes it when
 // finished
-func (c *StreamProcessorManager) runWorker(chainID ids.ID) error {
+func (c *StreamProcessorManager) runWorker(chainConfig cfg.ChainConfig) error {
 	if c.isStopping() {
-		c.log.Info("Not starting worker for chain %s because we're stopping", chainID)
+		c.log.Info("Not starting worker for chain %s because we're stopping", chainConfig.ID)
 		return nil
 	}
 
-	c.log.Info("Starting worker for chain %s", chainID)
-	defer c.log.Info("Exiting worker for chain %s", chainID)
+	c.log.Info("Starting worker for chain %s", chainConfig.ID)
+	defer c.log.Info("Exiting worker for chain %s", chainConfig.ID)
 
 	// Create a backend to get messages from
-	backend, err := c.factory(c.conf, c.conf.NetworkID, chainID)
+	backend, err := c.factory(c.conf, c.conf.NetworkID, chainConfig)
 	if err != nil {
 		// panic(err)
 		return err
@@ -139,7 +138,7 @@ func (c *StreamProcessorManager) runWorker(chainID ids.ID) error {
 			case kafka.RequestTimedOut:
 				c.log.Debug("Kafka timeout")
 			default:
-				c.log.Error("Unknown error:", err.Error())
+				c.log.Error("Unknown error: %s", err.Error())
 			}
 		}
 	)

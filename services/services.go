@@ -13,18 +13,29 @@ type Indexable interface {
 	ID() ids.ID
 	ChainID() ids.ID
 	Body() []byte
-	Timestamp() uint64
+	Timestamp() int64
 }
 
 // Indexer takes in Indexables and adds them to the services backend
 type Indexer interface {
+	Bootstrap() error
 	Index(Indexable) error
 }
 
 // FanOutIndexer takes in items and sends them to multiple backend Indexers
 type FanOutIndexer []Indexer
 
-// Add takes in an Indexable and sends it to all underlying backends
+// Bootstrap initializes all underlying backends
+func (fos FanOutIndexer) Bootstrap() (err error) {
+	for _, service := range fos {
+		if err = service.Bootstrap(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Index takes in an Indexable and sends it to all underlying indexers
 func (fos FanOutIndexer) Index(i Indexable) (err error) {
 	for _, service := range fos {
 		if err = service.Index(i); err != nil {
@@ -40,21 +51,18 @@ type IndexerCtx struct {
 	job *health.Job
 	db  dbr.SessionRunner
 
-	indexable Indexable
+	time time.Time
 }
 
-func NewIndexerContext(job *health.Job, db dbr.SessionRunner, i Indexable) IndexerCtx {
+func NewIndexerContext(job *health.Job, db dbr.SessionRunner, ts int64) IndexerCtx {
 	return IndexerCtx{
-		job:       job,
-		db:        db,
-		indexable: i,
+		job:  job,
+		db:   db,
+		time: time.Unix(ts, 0),
 	}
 }
 
-func (ic IndexerCtx) Context() context.Context { return ic.ctx }
+func (ic IndexerCtx) Time() time.Time          { return ic.time }
 func (ic IndexerCtx) Job() *health.Job         { return ic.job }
 func (ic IndexerCtx) DB() dbr.SessionRunner    { return ic.db }
-func (ic IndexerCtx) ID() ids.ID               { return ic.indexable.ID() }
-func (ic IndexerCtx) ChainID() ids.ID          { return ic.indexable.ChainID() }
-func (ic IndexerCtx) Body() []byte             { return ic.indexable.Body() }
-func (ic IndexerCtx) Time() time.Time          { return time.Unix(int64(ic.indexable.Timestamp()), 0) }
+func (ic IndexerCtx) Context() context.Context { return ic.ctx }

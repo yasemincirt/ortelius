@@ -6,8 +6,6 @@ package avm_index
 import (
 	"time"
 
-	"github.com/ava-labs/gecko/ids"
-
 	"github.com/ava-labs/ortelius/services/models"
 )
 
@@ -25,24 +23,6 @@ var (
 	ResultTypeAsset       SearchResultType = "asset"
 	ResultTypeAddress     SearchResultType = "address"
 	ResultTypeOutput      SearchResultType = "output"
-
-	IntervalMinute = 1 * time.Minute
-	IntervalHour   = 60 * time.Minute
-	IntervalDay    = 1440 * time.Minute
-	IntervalWeek   = 7 * IntervalDay
-	IntervalMonth  = 30 * IntervalDay
-	IntervalYear   = 365 * IntervalDay
-	IntervalAll    = time.Duration(0)
-
-	IntervalNames = map[string]time.Duration{
-		"minute": IntervalMinute,
-		"hour":   IntervalHour,
-		"day":    IntervalDay,
-		"week":   IntervalWeek,
-		"month":  IntervalMonth,
-		"year":   IntervalYear,
-		"all":    IntervalAll,
-	}
 )
 
 //
@@ -195,13 +175,6 @@ type SearchResult struct {
 //
 // Aggregates
 //
-
-type ChainInfo struct {
-	ID        ids.ID `json:"chainID"`
-	Alias     string `json:"chainAlias"`
-	VM        string `json:"vm"`
-	NetworkID uint32 `json:"networkID"`
-}
 
 type AggregatesHistogram struct {
 	Aggregates   Aggregates    `json:"aggregates"`

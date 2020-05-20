@@ -6,17 +6,18 @@ package avm_index
 import (
 	"errors"
 	"strings"
+	"time"
 
-	"github.com/ava-labs/gecko/genesis"
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/crypto"
 	"github.com/ava-labs/gecko/utils/hashing"
 	"github.com/ava-labs/gecko/utils/math"
 	"github.com/ava-labs/gecko/vms/avm"
-	"github.com/ava-labs/gecko/vms/platformvm"
+	"github.com/ava-labs/gecko/vms/components/codec"
 	"github.com/ava-labs/gecko/vms/secp256k1fx"
-	"github.com/ava-labs/ortelius/services"
 	"github.com/gocraft/dbr"
+
+	"github.com/ava-labs/ortelius/services"
 )
 
 const (
@@ -31,51 +32,40 @@ var (
 	ErrSerializationTooLong = errors.New("serialization is too long")
 )
 
-func errIsDuplicateEntryError(err error) bool {
-	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")
-}
+func (db *DB) bootstrap(genesisBytes []byte) error {
+	avmGenesis := &avm.Genesis{}
+	if err := db.codec.Unmarshal(genesisBytes, avmGenesis); err != nil {
+		return err
+	}
 
-func (i *Index) Bootstrap() error {
-	platformGenesisBytes, err := genesis.Genesis(i.networkID)
+	job := db.stream.NewJob("bootstrap")
+	sess := db.db.NewSession(job)
+
+	// Create db tx
+	dbTx, err := sess.Begin()
 	if err != nil {
 		return err
 	}
+	defer dbTx.RollbackUnlessCommitted()
 
-	platformGenesis := &platformvm.Genesis{}
-	if err = platformvm.Codec.Unmarshal(platformGenesisBytes, platformGenesis); err != nil {
-		return err
-	}
-	if err = platformGenesis.Initialize(); err != nil {
-		return err
-	}
-
-	avmGenesis := &avm.Genesis{}
-	for _, chain := range platformGenesis.Chains {
-		if chain.VMID.Equals(avm.ID) {
-			if err := i.vm.Codec().Unmarshal(chain.GenesisData, avmGenesis); err != nil {
-				return err
-			}
-			break
-		}
-	}
-
+	ctx := services.NewIndexerContext(job, dbTx, time.Now().Unix())
 	for _, tx := range avmGenesis.Txs {
-		txBytes, err := i.vm.Codec().Marshal(tx)
+		txBytes, err := db.codec.Marshal(tx)
 		if err != nil {
 			return err
 		}
-		utx := &avm.UniqueTx{TxState: &avm.TxState{Tx: &avm.Tx{UnsignedTx: tx, Creds: nil}}}
-		if err := i.db.Index(utx, platformGenesis.Timestamp, txBytes); err != nil {
+		err = db.ingestCreateAssetTx(ctx, txBytes, &tx.CreateAssetTx, tx.Alias)
+		if err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return dbTx.Commit()
 }
 
 // AddTx ingests a Transaction and adds it to the services
-func (r *DB) Index(tx *avm.UniqueTx, i services.Indexable) error {
-	job := r.stream.NewJob("add_tx")
+func (r *DB) Index(i services.Indexable) error {
+	job := r.stream.NewJob("index")
 	sess := r.db.NewSession(job)
 
 	// Create db tx
@@ -83,40 +73,44 @@ func (r *DB) Index(tx *avm.UniqueTx, i services.Indexable) error {
 	if err != nil {
 		return err
 	}
-
 	defer dbTx.RollbackUnlessCommitted()
 
 	// Ingest the tx and commit
-	err = r.ingestTx(services.NewIndexerContext(job, dbTx, i), tx)
+	err = r.ingestTx(services.NewIndexerContext(job, dbTx, i.Timestamp()), i.Body())
 	if err != nil {
 		return err
 	}
 	return dbTx.Commit()
 }
 
-func (r *DB) ingestTx(ctx services.IndexerCtx, tx *avm.UniqueTx) error {
+func (r *DB) ingestTx(ctx services.IndexerCtx, txBytes []byte) error {
 	// Validate that the serializations aren't too long
-	if len(ctx.Body()) > MaxSerializationLen {
+	if len(txBytes) > MaxSerializationLen {
 		return ErrSerializationTooLong
+	}
+
+	tx, err := parseTx(r.codec, txBytes)
+	if err != nil {
+		return err
 	}
 
 	// Finish processing with a type-specific ingestion routine
 	switch castTx := tx.UnsignedTx.(type) {
 	case *avm.GenesisAsset:
-		return r.ingestCreateAssetTx(ctx, &castTx.CreateAssetTx, castTx.Alias)
+		return r.ingestCreateAssetTx(ctx, txBytes, &castTx.CreateAssetTx, castTx.Alias)
 	case *avm.CreateAssetTx:
-		return r.ingestCreateAssetTx(ctx, castTx, "")
+		return r.ingestCreateAssetTx(ctx, txBytes, castTx, "")
 	case *avm.OperationTx:
 		// 	r.ingestOperationTx(ctx, tx)
 	case *avm.BaseTx:
-		return r.ingestBaseTx(ctx, tx, castTx)
+		return r.ingestBaseTx(ctx, txBytes, tx, castTx)
 	default:
 		return errors.New("unknown tx type")
 	}
 	return nil
 }
 
-func (r *DB) ingestCreateAssetTx(ctx services.IndexerCtx, tx *avm.CreateAssetTx, alias string) error {
+func (r *DB) ingestCreateAssetTx(ctx services.IndexerCtx, txBytes []byte, tx *avm.CreateAssetTx, alias string) error {
 	wrappedTxBytes, err := r.codec.Marshal(&avm.Tx{UnsignedTx: tx})
 	if err != nil {
 		return err
@@ -165,7 +159,7 @@ func (r *DB) ingestCreateAssetTx(ctx services.IndexerCtx, tx *avm.CreateAssetTx,
 		Pair("chain_id", r.chainID.String()).
 		Pair("type", TXTypeCreateAsset).
 		Pair("created_at", ctx.Time()).
-		Pair("canonical_serialization", ctx.Serialization()).
+		Pair("canonical_serialization", txBytes).
 		Exec()
 	if err != nil && !errIsDuplicateEntryError(err) {
 		return err
@@ -173,7 +167,7 @@ func (r *DB) ingestCreateAssetTx(ctx services.IndexerCtx, tx *avm.CreateAssetTx,
 	return nil
 }
 
-func (r *DB) ingestBaseTx(ctx services.IndexerCtx, uniqueTx *avm.UniqueTx, baseTx *avm.BaseTx) error {
+func (r *DB) ingestBaseTx(ctx services.IndexerCtx, txBytes []byte, uniqueTx *avm.Tx, baseTx *avm.BaseTx) error {
 	var (
 		err   error
 		total uint64 = 0
@@ -233,8 +227,7 @@ func (r *DB) ingestBaseTx(ctx services.IndexerCtx, uniqueTx *avm.UniqueTx, baseT
 		Pair("chain_id", baseTx.BCID.String()).
 		Pair("type", TXTypeBase).
 		Pair("created_at", ctx.Time()).
-		Pair("canonical_serialization", ctx.Serialization()).
-		Pair("json_serialization", ctx.JSONSerialization()).
+		Pair("canonical_serialization", txBytes).
 		Exec()
 	if err != nil && !errIsDuplicateEntryError(err) {
 		return err
@@ -320,4 +313,27 @@ func (r *DB) ingestOutputAddress(ctx services.IndexerCtx, outputID ids.ID, addre
 		_ = ctx.Job().EventErr("ingest_output_address", err)
 		return
 	}
+}
+
+func errIsDuplicateEntryError(err error) bool {
+	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")
+}
+
+func parseTx(c codec.Codec, bytes []byte) (*avm.Tx, error) {
+	tx := &avm.Tx{}
+	err := c.Unmarshal(bytes, tx)
+	if err != nil {
+		return nil, err
+	}
+	tx.Initialize(bytes)
+	return tx, nil
+
+	// utx := &avm.UniqueTx{
+	// 	TxState: &avm.TxState{
+	// 		Tx: tx,
+	// 	},
+	// 	txID: tx.ID(),
+	// }
+	//
+	// return utx, nil
 }
