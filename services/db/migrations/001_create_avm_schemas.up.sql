@@ -31,8 +31,8 @@ create table avm_outputs
     redeeming_transaction_id varchar(50)       not null default "",
     created_at               timestamp         not null default current_timestamp
 );
-create index avm_outputs_asset_id ON avm_outputs (asset_id);
-create unique index avm_outputs_tx_id_output_idx ON avm_outputs (transaction_id, output_index);
+create indexBlock avm_outputs_asset_id ON avm_outputs (asset_id);
+create unique indexBlock avm_outputs_tx_id_output_idx ON avm_outputs (transaction_id, output_index);
 
 create table avm_output_addresses
 (
@@ -41,8 +41,8 @@ create table avm_output_addresses
     redeeming_signature varbinary(128) null,
     created_at          timestamp      not null default current_timestamp
 );
-create index avm_output_addresses_output_id on avm_output_addresses (output_id);
-create unique index avm_output_addresses_output_id_addr on avm_output_addresses (output_id, address);
+create indexBlock avm_output_addresses_output_id on avm_output_addresses (output_id);
+create unique indexBlock avm_output_addresses_output_id_addr on avm_output_addresses (output_id, address);
 
 create table avm_transactions
 (
@@ -55,8 +55,8 @@ create table avm_transactions
 
     created_at              timestamp        not null default current_timestamp
 );
-create unique index avm_transactions_id ON avm_transactions (id);
-create index avm_transactions_chain_id ON avm_transactions (chain_id);
+create unique indexBlock avm_transactions_id ON avm_transactions (id);
+create indexBlock avm_transactions_chain_id ON avm_transactions (chain_id);
 
 create table addresses
 (

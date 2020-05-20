@@ -25,22 +25,24 @@ var (
 )
 
 type DB struct {
-	chainID ids.ID
-	codec   codec.Codec
-	stream  *health.Stream
-	db      *dbr.Connection
+	networkID uint32
+	chainID   ids.ID
+	codec     codec.Codec
+	stream    *health.Stream
+	db        *dbr.Connection
 }
 
 // NewDBIndex creates a new DB for the given config
-func NewDBIndex(stream *health.Stream, db *dbr.Connection, chainID ids.ID, codec codec.Codec) *DB {
+func NewDBIndex(stream *health.Stream, db *dbr.Connection, networkID uint32, chainID ids.ID, codec codec.Codec) *DB {
 	return &DB{
-		stream:  stream,
-		db:      db,
-		chainID: chainID,
-		codec:   codec,
+		networkID: networkID,
+		chainID:   chainID,
+		codec:     codec,
+		stream:    stream,
+		db:        db,
 	}
 }
 
-func (i *DB) newDBSession(name string) *dbr.Session {
+func (i *DB) newSession(name string) *dbr.Session {
 	return i.db.NewSession(i.stream.NewJob(name))
 }
