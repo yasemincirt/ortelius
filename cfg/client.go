@@ -4,6 +4,8 @@
 package cfg
 
 import (
+	"time"
+
 	"github.com/spf13/viper"
 )
 
@@ -25,8 +27,8 @@ type ClientConfig struct {
 
 	KafkaConfig
 	FilterConfig
-	Context string
-	IPCRoot string
+	IPCRoot   string
+	StartTime time.Time
 }
 
 type KafkaConfig struct {
@@ -40,7 +42,7 @@ type FilterConfig struct {
 }
 
 // NewClientConfig returns a *ClientConfig populated with data from the given file
-func NewClientConfig(context string, file string) (ClientConfig, error) {
+func NewClientConfig(file string) (ClientConfig, error) {
 	// Parse config file with viper and set defaults
 	v, err := getConfigViper(file, map[string]interface{}{
 		configKeysKafkaBrokers: "127.0.0.1:9092",
@@ -62,7 +64,6 @@ func NewClientConfig(context string, file string) (ClientConfig, error) {
 	return ClientConfig{
 		Common: common,
 
-		Context:      context,
 		IPCRoot:      v.GetString(configKeysIPCRoot),
 		KafkaConfig:  getKafkaConf(getSubViper(v, configKeysKafka)),
 		FilterConfig: getFilterConf(getSubViper(v, configKeysFilter)),

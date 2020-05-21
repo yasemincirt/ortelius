@@ -5,6 +5,8 @@ package stream
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/segmentio/kafka-go"
@@ -41,6 +43,10 @@ func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
 			return nil, err
 		}
 
+		if !conf.StartTime.IsZero() {
+			conf.KafkaConfig.GroupName = ""
+		}
+
 		// Create reader for the topic
 		c.reader = kafka.NewReader(kafka.ReaderConfig{
 			Topic:    chainConfig.ID.String(),
@@ -48,6 +54,18 @@ func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
 			GroupID:  conf.KafkaConfig.GroupName,
 			MaxBytes: 10e6,
 		})
+
+		// If the start time is set then seek to the correct offset
+		if !conf.StartTime.IsZero() {
+			ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(readTimeout))
+			defer cancelFn()
+
+			fmt.Println("Setting offset to:", conf.StartTime.String())
+			err = c.reader.SetOffsetAt(ctx, conf.StartTime)
+			if err != nil {
+				return nil, err
+			}
+		}
 
 		return c, nil
 	}
