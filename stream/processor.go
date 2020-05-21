@@ -24,7 +24,7 @@ var (
 	ErrUnknownProcessorType = errors.New("unknown processor type")
 )
 
-type ProcessorFactory func(cfg.ClientConfig, uint32, cfg.ChainConfig) (Processor, error)
+type ProcessorFactory func(cfg.StreamConfig, uint32, cfg.ChainConfig) (Processor, error)
 
 // Processor handles writing and reading to/from the event stream
 type Processor interface {
@@ -34,7 +34,7 @@ type Processor interface {
 
 // ProcessorManager reads or writes from/to the event stream backend
 type ProcessorManager struct {
-	conf    cfg.ClientConfig
+	conf    cfg.StreamConfig
 	log     *logging.Log
 	factory ProcessorFactory
 
@@ -45,7 +45,7 @@ type ProcessorManager struct {
 }
 
 // NewProcessorManager creates a new *ProcessorManager ready for listening
-func NewProcessorManager(conf cfg.ClientConfig, factory ProcessorFactory) (*ProcessorManager, error) {
+func NewProcessorManager(conf cfg.StreamConfig, factory ProcessorFactory) (*ProcessorManager, error) {
 	log, err := logging.New(conf.Logging)
 	if err != nil {
 		return nil, err

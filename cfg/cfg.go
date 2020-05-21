@@ -4,6 +4,7 @@
 package cfg
 
 import (
+	"bytes"
 	"errors"
 
 	"github.com/ava-labs/gecko/ids"
@@ -51,6 +52,50 @@ var (
 			},
 		},
 	}
+
+	defaultJSON = `{
+  "networkID": 12345,
+  "logDirectory": "/tmp/ortelius/logs/producer/avm",
+  "chains": {
+    "11111111111111111111111111111111LpoYY": {
+      "id": "11111111111111111111111111111111LpoYY",
+      "alias": "p",
+      "vmType": "pvm"
+    }
+  },
+
+  "services": {
+    "listenAddr": ":8080",
+    "db": {
+      "dsn": "root:password@tcp(127.0.0.1:3306)/ortelius_dev",
+      "driver": "mysql"
+    },
+    "redis": {
+      "db": 0,
+      "addr": "localhost:6379"
+    }
+  },
+
+  "stream": {
+    "kafka": {
+      "brokers": [
+        "127.0.0.1:29092"
+      ]
+    },
+    "filter": {
+      "min": 1073741824,
+      "max": 2147483648
+    },
+    "producer": {
+      "ipcRoot": "/tmp"
+    },
+    "consumer": {
+      "groupName": "indexer"
+    }
+  }
+
+}
+`
 )
 
 type Common struct {
@@ -79,28 +124,37 @@ type DBConfig struct {
 	TXDB   bool
 }
 
-func getConfigViper(file string, defaults map[string]interface{}) (*viper.Viper, error) {
+func getConfigViper(file string) (*viper.Viper, Common, error) {
 	v := viper.NewWithOptions(viper.KeyDelimiter("_"))
 
 	v.SetEnvPrefix(appName)
 	v.AutomaticEnv()
 
-	for key, val := range defaultCommon {
-		v.SetDefault(key, val)
-	}
-	for key, val := range defaults {
-		v.SetDefault(key, val)
-	}
+	// for key, val := range defaultCommon {
+	// 	v.SetDefault(key, val)
+	// }
+	// for key, val := range defaults {
+	// 	v.SetDefault(key, val)
+	// }
 
 	if file != "" {
 		v.SetConfigFile(file)
 		v.SetConfigType("json")
+
+		if err := v.ReadConfig(bytes.NewBufferString(defaultJSON)); err != nil {
+			return nil, Common{}, err
+		}
 		if err := v.ReadInConfig(); err != nil {
-			return nil, err
+			return nil, Common{}, err
 		}
 	}
 
-	return v, nil
+	common, err := getCommonConfig(v)
+	if err != nil {
+		return nil, Common{}, err
+	}
+
+	return v, common, nil
 }
 
 func getSubViper(v *viper.Viper, name string) *viper.Viper {

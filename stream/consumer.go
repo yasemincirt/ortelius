@@ -26,7 +26,7 @@ type consumer struct {
 
 // NewConsumerFactory returns a processorFactory for the given service consumer
 func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
-	return func(conf cfg.ClientConfig, networkID uint32, chainConfig cfg.ChainConfig) (Processor, error) {
+	return func(conf cfg.StreamConfig, networkID uint32, chainConfig cfg.ChainConfig) (Processor, error) {
 		var (
 			err error
 			c   = &consumer{}

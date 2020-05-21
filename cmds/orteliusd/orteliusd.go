@@ -161,7 +161,7 @@ func runListenCloser(lc listenCloser) {
 
 func streamProcessorCmdRunFn(configFile *string, startTime *string, runErr *error, factory stream.ProcessorFactory) func(_ *cobra.Command, _ []string) {
 	return func(_ *cobra.Command, _ []string) {
-		config, err := cfg.NewClientConfig(*configFile)
+		config, err := cfg.NewStreamConfig(*configFile)
 		if err != nil {
 			*runErr = err
 			return
