@@ -16,6 +16,7 @@ import (
 	"github.com/ava-labs/ortelius/api"
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/stream"
+	"github.com/ava-labs/ortelius/stream/consumers"
 
 	// Register service plugins
 	_ "github.com/ava-labs/ortelius/services/avm_index"
@@ -28,11 +29,14 @@ const (
 	apiCmdUse  = "api"
 	apiCmdDesc = "Runs the API daemon"
 
-	streamConsumerCmdUse  = "stream-consumer"
-	streamConsumerCmdDesc = "Runs the stream consumer daemon"
-
 	streamProducerCmdUse  = "stream-producer"
 	streamProducerCmdDesc = "Runs the stream producer daemon"
+
+	streamIndexerCmdUse  = "stream-indexer"
+	streamIndexerCmdDesc = "Runs the stream indexer daemon"
+
+	streamReplayerCmdUse  = "stream-replayer"
+	streamReplayerCmdDesc = "Runs the stream replayer daemon"
 )
 
 type params struct {
@@ -79,17 +83,24 @@ func execute() error {
 	})
 
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   streamConsumerCmdUse,
-		Short: streamConsumerCmdDesc,
-		Long:  streamConsumerCmdDesc,
-		Run:   streamProcessorCmdRunFn(params.configFile, &runErr, stream.NewConsumer),
-	})
-
-	rootCmd.AddCommand(&cobra.Command{
 		Use:   streamProducerCmdUse,
 		Short: streamProducerCmdDesc,
 		Long:  streamProducerCmdDesc,
 		Run:   streamProcessorCmdRunFn(params.configFile, &runErr, stream.NewProducer),
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   streamIndexerCmdUse,
+		Short: streamIndexerCmdDesc,
+		Long:  streamIndexerCmdDesc,
+		Run:   streamProcessorCmdRunFn(params.configFile, &runErr, consumers.NewIndexerFactory()),
+	})
+
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   streamReplayerCmdUse,
+		Short: streamReplayerCmdDesc,
+		Long:  streamReplayerCmdDesc,
+		Run:   streamProcessorCmdRunFn(params.configFile, &runErr, consumers.NewReplayerFactory()),
 	})
 
 	// Execute the command and return the runErr to the caller
@@ -135,7 +146,7 @@ func runListenCloser(lc listenCloser) {
 	}
 }
 
-func streamProcessorCmdRunFn(configFile string, runErr *error, factory streamProcessorFactory) func(_ *cobra.Command, _ []string) {
+func streamProcessorCmdRunFn(configFile string, runErr *error, factory stream.ProcessorFactory) func(_ *cobra.Command, _ []string) {
 	return func(_ *cobra.Command, _ []string) {
 		config, err := cfg.NewClientConfig("", configFile)
 		if err != nil {
@@ -143,7 +154,7 @@ func streamProcessorCmdRunFn(configFile string, runErr *error, factory streamPro
 			return
 		}
 
-		processor, err := newStreamProcessorManager(config, factory)
+		processor, err := stream.NewProcessorManager(config, factory)
 		if err != nil {
 			*runErr = err
 			return

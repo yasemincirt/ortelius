@@ -13,7 +13,7 @@ import (
 	"github.com/ava-labs/ortelius/services"
 )
 
-func (db *DB) Index(i services.Indexable) error {
+func (db *DB) Consume(i services.Consumable) error {
 	job := db.stream.NewJob("index")
 	sess := db.db.NewSession(job)
 
@@ -24,8 +24,8 @@ func (db *DB) Index(i services.Indexable) error {
 	}
 	defer dbTx.RollbackUnlessCommitted()
 
-	// Index the tx and commit
-	err = db.indexBlock(services.NewIndexerContext(job, dbTx, i.Timestamp()), i.Body())
+	// Consume the tx and commit
+	err = db.indexBlock(services.NewConsumerContext(job, dbTx, i.Timestamp()), i.Body())
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (db *DB) Bootstrap() error {
 	}
 	defer dbTx.RollbackUnlessCommitted()
 
-	ctx := services.NewIndexerContext(job, dbTx, int64(pvmGenesis.Timestamp))
+	ctx := services.NewConsumerContext(job, dbTx, int64(pvmGenesis.Timestamp))
 	blockID := ids.NewID([32]byte{})
 
 	for _, createChainTx := range pvmGenesis.Chains {
@@ -76,7 +76,7 @@ func (db *DB) Bootstrap() error {
 	return dbTx.Commit()
 }
 
-func (db *DB) indexBlock(ctx services.IndexerCtx, blockBytes []byte) error {
+func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	var block platformvm.Block
 	if err := platformvm.Codec.Unmarshal(blockBytes, &block); err != nil {
 		return ctx.Job().EventErr("index_block.unmarshal_block", err)
@@ -106,7 +106,7 @@ func (db *DB) indexBlock(ctx services.IndexerCtx, blockBytes []byte) error {
 	return nil
 }
 
-func (db *DB) indexCommonBlock(ctx services.IndexerCtx, blkType BlockType, blk platformvm.CommonBlock, blockBytes []byte) error {
+func (db *DB) indexCommonBlock(ctx services.ConsumerCtx, blkType BlockType, blk platformvm.CommonBlock, blockBytes []byte) error {
 	_, err := ctx.DB().
 		InsertInto("pvm_blocks").
 		Pair("id", blk.ID().String()).
@@ -122,7 +122,7 @@ func (db *DB) indexCommonBlock(ctx services.IndexerCtx, blkType BlockType, blk p
 	return nil
 }
 
-func (db *DB) indexTransaction(ctx services.IndexerCtx, blockID ids.ID, txType TransactionType, id ids.ID, nonce uint64, sig [65]byte) error {
+func (db *DB) indexTransaction(ctx services.ConsumerCtx, blockID ids.ID, txType TransactionType, id ids.ID, nonce uint64, sig [65]byte) error {
 	_, err := ctx.DB().
 		InsertInto("pvm_transactions").
 		Pair("id", id.String()).
@@ -138,7 +138,7 @@ func (db *DB) indexTransaction(ctx services.IndexerCtx, blockID ids.ID, txType T
 	return nil
 }
 
-func (db *DB) indexDecisionTx(ctx services.IndexerCtx, blockID ids.ID, dTx platformvm.DecisionTx) error {
+func (db *DB) indexDecisionTx(ctx services.ConsumerCtx, blockID ids.ID, dTx platformvm.DecisionTx) error {
 	switch tx := dTx.(type) {
 	case *platformvm.CreateChainTx:
 		return db.indexCreateChainTx(ctx, blockID, tx)
@@ -148,7 +148,7 @@ func (db *DB) indexDecisionTx(ctx services.IndexerCtx, blockID ids.ID, dTx platf
 	return nil
 }
 
-func (db *DB) indexProposalTx(ctx services.IndexerCtx, blockID ids.ID, proposalTx platformvm.ProposalTx) error {
+func (db *DB) indexProposalTx(ctx services.ConsumerCtx, blockID ids.ID, proposalTx platformvm.ProposalTx) error {
 	switch tx := proposalTx.(type) {
 	case platformvm.TimedTx:
 		return db.indexTimedTx(ctx, blockID, tx)
@@ -156,7 +156,7 @@ func (db *DB) indexProposalTx(ctx services.IndexerCtx, blockID ids.ID, proposalT
 	return nil
 }
 
-func (db *DB) indexTimedTx(ctx services.IndexerCtx, blockID ids.ID, tx platformvm.TimedTx) error {
+func (db *DB) indexTimedTx(ctx services.ConsumerCtx, blockID ids.ID, tx platformvm.TimedTx) error {
 	var (
 		nonce    uint64
 		sig      [65]byte
@@ -185,7 +185,7 @@ func (db *DB) indexTimedTx(ctx services.IndexerCtx, blockID ids.ID, tx platformv
 	return nil
 }
 
-func (db *DB) indexAtomicTx(ctx services.IndexerCtx, blockID ids.ID, atomicTx platformvm.AtomicTx) error {
+func (db *DB) indexAtomicTx(ctx services.ConsumerCtx, blockID ids.ID, atomicTx platformvm.AtomicTx) error {
 	switch tx := atomicTx.(type) {
 	case *platformvm.ImportTx:
 		return db.indexTransaction(ctx, blockID, TransactionTypeImport, tx.ID(), tx.Nonce, tx.Sig)
@@ -195,7 +195,7 @@ func (db *DB) indexAtomicTx(ctx services.IndexerCtx, blockID ids.ID, atomicTx pl
 	return nil
 }
 
-func (db *DB) indexCreateChainTx(ctx services.IndexerCtx, blockID ids.ID, tx *platformvm.CreateChainTx) error {
+func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, blockID ids.ID, tx *platformvm.CreateChainTx) error {
 	err := db.indexTransaction(ctx, blockID, TransactionTypeCreateChain, tx.ID(), tx.Nonce, [65]byte{})
 	if err != nil {
 		return err
@@ -245,7 +245,7 @@ func (db *DB) indexCreateChainTx(ctx services.IndexerCtx, blockID ids.ID, tx *pl
 	return nil
 }
 
-func (db *DB) indexCreateSubnetTx(ctx services.IndexerCtx, blockID ids.ID, tx *platformvm.CreateSubnetTx) error {
+func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, blockID ids.ID, tx *platformvm.CreateSubnetTx) error {
 	err := db.indexTransaction(ctx, blockID, TransactionTypeCreateSubnet, tx.ID(), tx.Nonce, tx.Sig)
 	if err != nil {
 		return err
@@ -278,7 +278,7 @@ func (db *DB) indexCreateSubnetTx(ctx services.IndexerCtx, blockID ids.ID, tx *p
 	return nil
 }
 
-func (db *DB) indexValidator(ctx services.IndexerCtx, txID ids.ID, dv platformvm.DurationValidator, destination ids.ShortID, shares uint32, subnetID ids.ID) error {
+func (db *DB) indexValidator(ctx services.ConsumerCtx, txID ids.ID, dv platformvm.DurationValidator, destination ids.ShortID, shares uint32, subnetID ids.ID) error {
 	_, err := ctx.DB().
 		InsertInto("pvm_validators").
 		Pair("transaction_id", txID.String()).

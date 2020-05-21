@@ -45,7 +45,7 @@ func (i *Index) GetChainInfo(alias string, networkID uint32) (*models.ChainInfo,
 	}, nil
 }
 
-func (i *Index) Index(ingestable services.Indexable) error            { return i.db.Index(ingestable) }
+func (i *Index) Consume(ingestable services.Consumable) error         { return i.db.Consume(ingestable) }
 func (i *Index) Bootstrap() error                                     { return i.db.Bootstrap() }
 func (i *Index) ListBlocks(p ListBlocksParams) (*BlockList, error)    { return i.db.ListBlocks(p) }
 func (i *Index) ListSubnets(p ListSubnetsParams) (*SubnetList, error) { return i.db.ListSubnets(p) }

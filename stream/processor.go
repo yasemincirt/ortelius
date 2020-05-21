@@ -1,4 +1,7 @@
-package main
+// (c) 2020, Ava Labs, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package stream
 
 import (
 	"context"
@@ -11,27 +14,29 @@ import (
 	"nanomsg.org/go/mangos/v2"
 
 	"github.com/ava-labs/ortelius/cfg"
-	"github.com/ava-labs/ortelius/stream"
-
-	// register transports
-	_ "nanomsg.org/go/mangos/v2/transport/ipc"
 )
 
 var (
-	streamReadTimeout = 10 * time.Second
+	readTimeout = 10 * time.Second
 
-	// ErrUnknownStreamProcessorType is returned when encountering a client type with no
+	// ErrUnknownProcessorType is returned when encountering a client type with no
 	// known implementation
-	ErrUnknownStreamProcessorType = errors.New("unknown stream processor type")
+	ErrUnknownProcessorType = errors.New("unknown processor type")
 )
 
-type streamProcessorFactory func(cfg.ClientConfig, uint32, cfg.ChainConfig) (stream.Processor, error)
+type ProcessorFactory func(cfg.ClientConfig, uint32, cfg.ChainConfig) (Processor, error)
 
-// StreamProcessorManager reads or writes from/to the event stream backend
-type StreamProcessorManager struct {
+// Processor handles writing and reading to/from the event stream
+type Processor interface {
+	ProcessNextMessage(context.Context) (*Message, error)
+	Close() error
+}
+
+// ProcessorManager reads or writes from/to the event stream backend
+type ProcessorManager struct {
 	conf    cfg.ClientConfig
 	log     *logging.Log
-	factory streamProcessorFactory
+	factory ProcessorFactory
 
 	// Concurrency control
 	workerWG *sync.WaitGroup
@@ -39,14 +44,14 @@ type StreamProcessorManager struct {
 	doneCh   chan struct{}
 }
 
-// newStreamProcessorManager creates a new *StreamProcessorManager ready for listening
-func newStreamProcessorManager(conf cfg.ClientConfig, factory streamProcessorFactory) (*StreamProcessorManager, error) {
+// NewProcessorManager creates a new *ProcessorManager ready for listening
+func NewProcessorManager(conf cfg.ClientConfig, factory ProcessorFactory) (*ProcessorManager, error) {
 	log, err := logging.New(conf.Logging)
 	if err != nil {
 		return nil, err
 	}
 
-	return &StreamProcessorManager{
+	return &ProcessorManager{
 		conf:    conf,
 		log:     log,
 		factory: factory,
@@ -58,7 +63,7 @@ func newStreamProcessorManager(conf cfg.ClientConfig, factory streamProcessorFac
 }
 
 // Listen sets a client to listen for and handle incoming messages
-func (c *StreamProcessorManager) Listen() error {
+func (c *ProcessorManager) Listen() error {
 	// Create a backend for each chain we want to watch and wait for them to exit
 	workerManagerWG := &sync.WaitGroup{}
 	for _, chainConfig := range c.conf.ChainsConfig {
@@ -68,7 +73,7 @@ func (c *StreamProcessorManager) Listen() error {
 			c.log.Info("Started worker manager for chain %s", chainConfig.ID)
 
 			// Keep running the worker until it exits without an error
-			for err := c.runWorker(chainConfig); err != nil; err = c.runWorker(chainConfig) {
+			for err := c.runProcessor(chainConfig); err != nil; err = c.runProcessor(chainConfig) {
 				c.log.Error("Error running worker: %s", err.Error())
 				<-time.After(10 * time.Second)
 			}
@@ -85,13 +90,13 @@ func (c *StreamProcessorManager) Listen() error {
 }
 
 // Close tells the workers to shutdown and waits for them to all stop
-func (c *StreamProcessorManager) Close() error {
+func (c *ProcessorManager) Close() error {
 	close(c.quitCh)
 	<-c.doneCh
 	return nil
 }
 
-func (c *StreamProcessorManager) isStopping() bool {
+func (c *ProcessorManager) isStopping() bool {
 	select {
 	case <-c.quitCh:
 		return true
@@ -100,9 +105,9 @@ func (c *StreamProcessorManager) isStopping() bool {
 	}
 }
 
-// runWorker starts the processing loop for the backend and closes it when
+// runProcessor starts the processing loop for the backend and closes it when
 // finished
-func (c *StreamProcessorManager) runWorker(chainConfig cfg.ChainConfig) error {
+func (c *ProcessorManager) runProcessor(chainConfig cfg.ChainConfig) error {
 	if c.isStopping() {
 		c.log.Info("Not starting worker for chain %s because we're stopping", chainConfig.ID)
 		return nil
@@ -120,12 +125,12 @@ func (c *StreamProcessorManager) runWorker(chainConfig cfg.ChainConfig) error {
 
 	// Create a closure that processes the next message from the backend
 	var (
-		msg      *stream.Message
+		msg      *Message
 		ctx      context.Context
 		cancelFn context.CancelFunc
 
 		processNextMessage = func() {
-			ctx, cancelFn = context.WithTimeout(context.Background(), streamReadTimeout)
+			ctx, cancelFn = context.WithTimeout(context.Background(), readTimeout)
 			defer cancelFn()
 
 			msg, err = backend.ProcessNextMessage(ctx)

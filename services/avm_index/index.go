@@ -76,7 +76,7 @@ func (i *Index) Bootstrap() error {
 	return nil
 }
 
-func (i *Index) Index(ingestable services.Indexable) error {
+func (i *Index) Consume(ingestable services.Consumable) error {
 	if err := i.db.Index(ingestable); err != nil {
 		return err
 	}

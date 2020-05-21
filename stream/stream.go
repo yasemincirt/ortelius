@@ -4,7 +4,6 @@
 package stream
 
 import (
-	"context"
 	"errors"
 
 	"github.com/ava-labs/gecko/ids"
@@ -13,12 +12,6 @@ import (
 var (
 	ErrUnknownVM = errors.New("Unknown VM")
 )
-
-// Processor handles writing and reading to/from the event stream
-type Processor interface {
-	ProcessNextMessage(context.Context) (*Message, error)
-	Close() error
-}
 
 // Message is a message on the event stream
 type Message struct {

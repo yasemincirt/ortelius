@@ -22,7 +22,7 @@ const (
 	redisKeyPrefixesRecentTxs = "recent_txs"
 )
 
-// Redis is an Accumulator and Index backed by redis
+// Redis is an Accumulator and Consume backed by redis
 type Redis struct {
 	chainID ids.ID
 	client  *redis.Client
@@ -34,7 +34,7 @@ func NewRedisIndex(client *redis.Client, chainID ids.ID) *Redis {
 }
 
 // AddTx ingests a Transaction and adds it to the services
-func (r *Redis) Index(i services.Indexable) error {
+func (r *Redis) Index(i services.Consumable) error {
 	var (
 		pipe = r.client.TxPipeline()
 

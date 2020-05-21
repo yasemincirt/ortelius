@@ -11,45 +11,46 @@ import (
 
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
-	"github.com/ava-labs/ortelius/services/avm_index"
-	"github.com/ava-labs/ortelius/services/pvm_index"
 	"github.com/ava-labs/ortelius/stream/record"
 )
 
-// consumer takes events from Kafka and sends them to a service
+type serviceConsumerFactory func(cfg.ServiceConfig, uint32, cfg.ChainConfig) (services.Consumer, error)
+
+// consumer takes events from Kafka and sends them to a service consumer
 type consumer struct {
-	reader  *kafka.Reader
-	indexer services.Indexer
+	reader   *kafka.Reader
+	consumer services.Consumer
 }
 
-// NewConsumer creates a consumer for the given config
-func NewConsumer(conf cfg.ClientConfig, networkID uint32, chainConfig cfg.ChainConfig) (Processor, error) {
-	var (
-		err error
-		c   = &consumer{}
-	)
+// NewConsumerFactory returns a processorFactory for the given service consumer
+func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
+	return func(conf cfg.ClientConfig, networkID uint32, chainConfig cfg.ChainConfig) (Processor, error) {
+		var (
+			err error
+			c   = &consumer{}
+		)
 
-	// Create service backend
-	c.indexer, err = createIndexer(conf.ServiceConfig, networkID, chainConfig)
-	if err != nil {
-		return nil, err
+		// Create consumer backend
+		c.consumer, err = factory(conf.ServiceConfig, networkID, chainConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		// Bootstrap our index
+		if err = c.consumer.Bootstrap(); err != nil {
+			return nil, err
+		}
+
+		// Create reader for the topic
+		c.reader = kafka.NewReader(kafka.ReaderConfig{
+			Topic:    chainConfig.ID.String(),
+			Brokers:  conf.KafkaConfig.Brokers,
+			GroupID:  conf.KafkaConfig.GroupName,
+			MaxBytes: 10e6,
+		})
+
+		return c, nil
 	}
-
-	// Bootstrap our index
-	if err = c.indexer.Bootstrap(); err != nil {
-		return nil, err
-	}
-
-	// Create reader for the topic
-	c.reader = kafka.NewReader(kafka.ReaderConfig{
-		Topic:    chainConfig.ID.String(),
-		Brokers:  conf.KafkaConfig.Brokers,
-		GroupID:  conf.KafkaConfig.GroupName,
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
-	})
-
-	return c, nil
 }
 
 // Close closes the consumer
@@ -63,10 +64,10 @@ func (c *consumer) ProcessNextMessage(ctx context.Context) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	return msg, c.indexer.Index(msg)
+	return msg, c.consumer.Consume(msg)
 }
 
-// getNextMessage gets the next Message from the Kafka consumer
+// getNextMessage gets the next Message from the Kafka Indexer
 func getNextMessage(ctx context.Context, r *kafka.Reader) (*Message, error) {
 	// Get raw Message from Kafka
 	msg, err := r.ReadMessage(ctx)
@@ -98,16 +99,4 @@ func getNextMessage(ctx context.Context, r *kafka.Reader) (*Message, error) {
 		body:      body,
 		timestamp: msg.Time.UTC().Unix(),
 	}, nil
-}
-
-func createIndexer(conf cfg.ServiceConfig, networkID uint32, chainConfig cfg.ChainConfig) (indexer services.Indexer, err error) {
-	switch chainConfig.VMType {
-	case avm_index.VMName:
-		indexer, err = avm_index.New(conf, networkID, chainConfig.ID)
-	case pvm_index.VMName:
-		indexer, err = pvm_index.New(conf, networkID, chainConfig.ID)
-	default:
-		return nil, ErrUnknownVM
-	}
-	return indexer, err
 }
