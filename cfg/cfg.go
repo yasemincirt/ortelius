@@ -90,8 +90,6 @@ func NewFromFile(filePath string) (*Config, error) {
 	}
 
 	// Get sub vipers for all objects with parents
-	// chainsViper := newSubViper(v, keysChains)
-
 	servicesViper := newSubViper(v, keysServices)
 	servicesAPIViper := newSubViper(servicesViper, keysServicesAPI)
 	servicesDBViper := newSubViper(servicesViper, keysServicesDB)
