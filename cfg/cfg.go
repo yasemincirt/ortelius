@@ -51,6 +51,7 @@ type DB struct {
 	Driver string `json:"driver"`
 	TXDB   bool   `json:"txDB"`
 }
+
 type Redis struct {
 	Addr     string `json:"addr"`
 	Password string `json:"password"`
@@ -60,8 +61,8 @@ type Redis struct {
 type Stream struct {
 	Kafka    `json:"kafka"`
 	Filter   `json:"filter"`
-	Producer StreamProducer `json:"producer"`
-	Consumer StreamConsumer `json:"consumer"`
+	Producer Producer `json:"producer"`
+	Consumer Consumer `json:"consumer"`
 }
 
 type Kafka struct {
@@ -73,11 +74,11 @@ type Filter struct {
 	Max uint32 `json:"max"`
 }
 
-type StreamProducer struct {
+type Producer struct {
 	IPCRoot string `json:"ipcRoot"`
 }
 
-type StreamConsumer struct {
+type Consumer struct {
 	StartTime time.Time `json:"startTime"`
 	GroupName string    `json:"groupName"`
 }
@@ -136,10 +137,10 @@ func NewFromFile(filePath string) (*Config, error) {
 				Min: streamFilterViper.GetUint32(keysStreamFilterMin),
 				Max: streamFilterViper.GetUint32(keysStreamFilterMax),
 			},
-			Producer: StreamProducer{
+			Producer: Producer{
 				IPCRoot: streamProducerViper.GetString(keysStreamProducerIPCRoot),
 			},
-			Consumer: StreamConsumer{
+			Consumer: Consumer{
 				StartTime: streamConsumerViper.GetTime(keysStreamConsumerStartTime),
 				GroupName: streamConsumerViper.GetString(keysStreamConsumerGroupName),
 			},
