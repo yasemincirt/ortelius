@@ -20,7 +20,7 @@ type Connections struct {
 	db     *dbr.Connection
 }
 
-func NewConnectionsFromConfig(conf cfg.ServiceConfig) (*Connections, error) {
+func NewConnectionsFromConfig(conf cfg.Services) (*Connections, error) {
 	stream := NewStream()
 
 	var (

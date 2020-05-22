@@ -15,6 +15,7 @@ import (
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol"
 	"nanomsg.org/go/mangos/v2/protocol/sub"
+	_ "nanomsg.org/go/mangos/v2/transport/ipc" // Register transport
 
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/stream/record"
@@ -29,20 +30,20 @@ type producer struct {
 }
 
 // NewProducer creates a producer using the given config
-func NewProducer(conf cfg.StreamConfig, _ uint32, chainConfig cfg.ChainConfig) (Processor, error) {
+func NewProducer(conf cfg.Config, _ uint32, chainConfig cfg.Chain) (Processor, error) {
 	p := &producer{
 		chainID:     chainConfig.ID,
-		binFilterFn: newBinFilterFn(conf.FilterConfig.Min, conf.FilterConfig.Max),
+		binFilterFn: newBinFilterFn(conf.Filter.Min, conf.Filter.Max),
 	}
 
 	var err error
-	p.sock, err = createIPCSocket("ipc://" + path.Join(conf.IPCRoot, chainConfig.ID.String()) + ".ipc")
+	p.sock, err = createIPCSocket("ipc://" + path.Join(conf.Producer.IPCRoot, chainConfig.ID.String()) + ".ipc")
 	if err != nil {
 		return nil, err
 	}
 
 	p.writer = kafka.NewWriter(kafka.WriterConfig{
-		Brokers:  conf.KafkaConfig.Brokers,
+		Brokers:  conf.Brokers,
 		Topic:    chainConfig.ID.String(),
 		Balancer: &kafka.LeastBytes{},
 	})

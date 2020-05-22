@@ -4,17 +4,15 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ava-labs/ortelius/api"
+	// "github.com/ava-labs/ortelius/api"
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/stream"
 	"github.com/ava-labs/ortelius/stream/consumers"
@@ -24,7 +22,8 @@ import (
 )
 
 const (
-	rootCmdUse  = "orteliusd [command]\nex: orteliusd api"
+	// rootCmdUse  = "orteliusd [command]\nex: orteliusd api"
+	rootCmdUse  = "orteliusd [command]"
 	rootCmdDesc = "Daemons for Ortelius."
 
 	apiCmdUse  = "api"
@@ -39,8 +38,8 @@ const (
 	streamIndexerCmdUse  = "indexer"
 	streamIndexerCmdDesc = "Runs the stream indexer daemon"
 
-	streamReplayerCmdUse  = "replayer"
-	streamReplayerCmdDesc = "Runs the stream replayer daemon"
+	streamBroadcasterCmdUse  = "broadcaster"
+	streamBroadcasterCmdDesc = "Runs the stream broadcaster daemon"
 )
 
 // listenCloser listens for messages until it's asked to close
@@ -51,7 +50,7 @@ type listenCloser interface {
 
 func main() {
 	if err := execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		log.Fatalln("Failed to run:", err.Error())
 		os.Exit(1)
 	}
 }
@@ -59,84 +58,78 @@ func main() {
 // Execute runs the root command for ortelius
 func execute() error {
 	var (
-		rootCmd = &cobra.Command{Use: rootCmdUse, Short: rootCmdDesc, Long: rootCmdDesc}
-
-		runErr error
-
-		newStrPtr = func() *string { s := ""; return &s }
-
-		configFile = newStrPtr()
-		startTime  = newStrPtr()
-
-		apiCmd = &cobra.Command{
-			Use:   apiCmdUse,
-			Short: apiCmdDesc,
-			Long:  apiCmdDesc,
-			Run: func(cmd *cobra.Command, args []string) {
-				if len(args) == 0 {
-					cmd.Help()
-					os.Exit(0)
+		runErr     error
+		config     = &cfg.Config{}
+		configFile = func() *string { s := ""; return &s }()
+		cmd        = &cobra.Command{Use: rootCmdUse, Short: rootCmdDesc, Long: rootCmdDesc,
+			PersistentPreRun: func(cmd *cobra.Command, args []string) {
+				c, err := cfg.NewFromFile(*configFile)
+				if err != nil {
+					log.Fatalln("Failed to read config file", *configFile, ":", err.Error())
 				}
-
-				var config cfg.APIConfig
-				var lc listenCloser
-				if config, runErr = cfg.NewAPIConfig(*configFile); runErr != nil {
-					return
-				}
-				if lc, runErr = api.NewServer(config); runErr != nil {
-					return
-				}
-				runListenCloser(lc)
-			},
-		}
-
-		streamCmd = &cobra.Command{
-			Use:   streamCmdUse,
-			Short: streamCmdDesc,
-			Long:  streamCmdDesc,
-			Run: func(cmd *cobra.Command, args []string) {
-				if len(args) == 0 {
-					cmd.Help()
-					os.Exit(0)
-				}
+				*config = *c
 			},
 		}
 	)
 
 	// Add flags and commands
-	rootCmd.PersistentFlags().StringVarP(configFile, "config", "c", "config.json", "")
-	streamCmd.PersistentFlags().StringVar(startTime, "starttime", "startTime", "")
+	cmd.PersistentFlags().StringVarP(configFile, "config", "c", "config.json", "")
+	cmd.AddCommand(createStreamCmds(config, &runErr), createAPICmds(config, &runErr))
 
-	rootCmd.AddCommand(apiCmd)
-	rootCmd.AddCommand(streamCmd)
+	// Execute the command and return the runErr to the caller
+	if err := cmd.Execute(); err != nil {
+		return err
+	}
+	return runErr
+}
 
-	// Add stream sub commands
+func createAPICmds(config *cfg.Config, runErr *error) *cobra.Command {
+	return &cobra.Command{
+		Use:   apiCmdUse,
+		Short: apiCmdDesc,
+		Long:  apiCmdDesc,
+		Run: func(cmd *cobra.Command, args []string) {
+			var lc listenCloser
+			lc, err := api.NewServer(*config)
+			if err != nil {
+				*runErr = err
+				return
+			}
+			runListenCloser(lc)
+		},
+	}
+}
+
+func createStreamCmds(config *cfg.Config, runErr *error) *cobra.Command {
+	streamCmd := &cobra.Command{
+		Use:   streamCmdUse,
+		Short: streamCmdDesc,
+		Long:  streamCmdDesc,
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Help()
+			os.Exit(0)
+		},
+	}
+
+	// Add sub commands
 	streamCmd.AddCommand(&cobra.Command{
 		Use:   streamProducerCmdUse,
 		Short: streamProducerCmdDesc,
 		Long:  streamProducerCmdDesc,
-		Run:   streamProcessorCmdRunFn(configFile, startTime, &runErr, stream.NewProducer),
-	})
-
-	streamCmd.AddCommand(&cobra.Command{
+		Run:   runStreamProcessorManager(config, runErr, stream.NewProducer),
+	}, &cobra.Command{
 		Use:   streamIndexerCmdUse,
 		Short: streamIndexerCmdDesc,
 		Long:  streamIndexerCmdDesc,
-		Run:   streamProcessorCmdRunFn(configFile, startTime, &runErr, consumers.NewIndexerFactory()),
+		Run:   runStreamProcessorManager(config, runErr, consumers.NewIndexerFactory()),
+	}, &cobra.Command{
+		Use:   streamBroadcasterCmdUse,
+		Short: streamBroadcasterCmdDesc,
+		Long:  streamBroadcasterCmdDesc,
+		Run:   runStreamProcessorManager(config, runErr, consumers.NewBroadcasterFactory()),
 	})
 
-	streamCmd.AddCommand(&cobra.Command{
-		Use:   streamReplayerCmdUse,
-		Short: streamReplayerCmdDesc,
-		Long:  streamReplayerCmdDesc,
-		Run:   streamProcessorCmdRunFn(configFile, startTime, &runErr, consumers.NewReplayerFactory()),
-	})
-
-	// Execute the command and return the runErr to the caller
-	if err := rootCmd.Execute(); err != nil {
-		return err
-	}
-	return runErr
+	return streamCmd
 }
 
 // runListenCloser runs the listenCloser until signaled to stop
@@ -159,30 +152,16 @@ func runListenCloser(lc listenCloser) {
 	}
 }
 
-func streamProcessorCmdRunFn(configFile *string, startTime *string, runErr *error, factory stream.ProcessorFactory) func(_ *cobra.Command, _ []string) {
+// runStreamProcessorManager returns a cobra command that instantiates and runs
+// a stream process manager
+func runStreamProcessorManager(config *cfg.Config, runErr *error, factory stream.ProcessorFactory) func(_ *cobra.Command, _ []string) {
 	return func(_ *cobra.Command, _ []string) {
-		config, err := cfg.NewStreamConfig(*configFile)
+		// Create and start processor manager
+		pm, err := stream.NewProcessorManager(*config, factory)
 		if err != nil {
 			*runErr = err
 			return
 		}
-
-		// Add start time flag to config
-		if startTime != nil && *startTime != "" {
-			ts, err := strconv.Atoi(*startTime)
-			if err != nil {
-				*runErr = err
-				return
-			}
-			config.StartTime = time.Unix(int64(ts), 0)
-		}
-
-		// Create and start processor
-		processor, err := stream.NewProcessorManager(config, factory)
-		if err != nil {
-			*runErr = err
-			return
-		}
-		runListenCloser(processor)
+		runListenCloser(pm)
 	}
 }

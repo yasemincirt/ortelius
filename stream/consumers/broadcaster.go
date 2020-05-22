@@ -11,16 +11,16 @@ import (
 	"github.com/ava-labs/ortelius/stream"
 )
 
-func NewReplayerFactory() stream.ProcessorFactory {
-	return stream.NewConsumerFactory(createReplayerConsumer)
+func NewBroadcasterFactory() stream.ProcessorFactory {
+	return stream.NewConsumerFactory(createBroadcasterConsumer)
 }
 
-func createReplayerConsumer(conf cfg.ServiceConfig, networkID uint32, chainConfig cfg.ChainConfig) (indexer services.Consumer, err error) {
+func createBroadcasterConsumer(conf cfg.Config, networkID uint32, chainConfig cfg.Chain) (indexer services.Consumer, err error) {
 	switch chainConfig.VMType {
 	case avm_index.VMName:
-		indexer, err = avm_index.New(conf, networkID, chainConfig.ID)
+		indexer, err = avm_index.New(conf.Services, networkID, chainConfig.ID)
 	case pvm_index.VMName:
-		indexer, err = pvm_index.New(conf, networkID, chainConfig.ID)
+		indexer, err = pvm_index.New(conf.Services, networkID, chainConfig.ID)
 	default:
 		return nil, stream.ErrUnknownVM
 	}

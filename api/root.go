@@ -23,7 +23,7 @@ type chainInfo struct {
 
 type RootRequestContext struct{}
 
-func newRootRouter(chainsConf cfg.ChainsConfig) (*web.Router, error) {
+func newRootRouter(chainsConf cfg.Chains) (*web.Router, error) {
 	i := &index{Chains: make(map[string]chainInfo, len(chainsConf))}
 	for id, info := range chainsConf {
 		i.Chains[id.String()] = chainInfo{

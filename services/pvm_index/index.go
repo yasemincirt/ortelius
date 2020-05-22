@@ -23,7 +23,7 @@ type Index struct {
 	db        *DB
 }
 
-func New(conf cfg.ServiceConfig, networkID uint32, chainID ids.ID) (*Index, error) {
+func New(conf cfg.Services, networkID uint32, chainID ids.ID) (*Index, error) {
 	conns, err := services.NewConnectionsFromConfig(conf)
 	if err != nil {
 		return nil, err

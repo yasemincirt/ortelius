@@ -16,7 +16,7 @@ import (
 	"github.com/ava-labs/ortelius/stream/record"
 )
 
-type serviceConsumerFactory func(cfg.ServiceConfig, uint32, cfg.ChainConfig) (services.Consumer, error)
+type serviceConsumerFactory func(cfg.Config, uint32, cfg.Chain) (services.Consumer, error)
 
 // consumer takes events from Kafka and sends them to a service consumer
 type consumer struct {
@@ -26,14 +26,14 @@ type consumer struct {
 
 // NewConsumerFactory returns a processorFactory for the given service consumer
 func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
-	return func(conf cfg.StreamConfig, networkID uint32, chainConfig cfg.ChainConfig) (Processor, error) {
+	return func(conf cfg.Config, networkID uint32, chainConfig cfg.Chain) (Processor, error) {
 		var (
 			err error
 			c   = &consumer{}
 		)
 
 		// Create consumer backend
-		c.consumer, err = factory(conf.ServiceConfig, networkID, chainConfig)
+		c.consumer, err = factory(conf, networkID, chainConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -43,25 +43,25 @@ func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
 			return nil, err
 		}
 
-		if !conf.StartTime.IsZero() {
-			conf.KafkaConfig.GroupName = ""
+		if !conf.Consumer.StartTime.IsZero() {
+			conf.Consumer.GroupName = ""
 		}
 
 		// Create reader for the topic
 		c.reader = kafka.NewReader(kafka.ReaderConfig{
 			Topic:    chainConfig.ID.String(),
-			Brokers:  conf.KafkaConfig.Brokers,
-			GroupID:  conf.KafkaConfig.GroupName,
+			Brokers:  conf.Kafka.Brokers,
+			GroupID:  conf.Consumer.GroupName,
 			MaxBytes: 10e6,
 		})
 
 		// If the start time is set then seek to the correct offset
-		if !conf.StartTime.IsZero() {
+		if !conf.Consumer.StartTime.IsZero() {
 			ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(readTimeout))
 			defer cancelFn()
 
-			fmt.Println("Setting offset to:", conf.StartTime.String())
-			err = c.reader.SetOffsetAt(ctx, conf.StartTime)
+			fmt.Println("Setting offset to:", conf.Consumer.StartTime.String())
+			err = c.reader.SetOffsetAt(ctx, conf.Consumer.StartTime)
 			if err != nil {
 				return nil, err
 			}

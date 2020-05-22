@@ -4,261 +4,152 @@
 package cfg
 
 import (
-	"bytes"
 	"errors"
+	"time"
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/logging"
 	"github.com/go-redis/redis"
-	"github.com/spf13/viper"
 )
 
-const (
-	appName = "ortelius"
-
-	configKeysNetworkID   = "networkID"
-	configKeyLogDirectory = "logDirectory"
-
-	configKeysChains       = "chains"
-	configKeysChainsID     = "id"
-	configKeysChainsAlias  = "alias"
-	configKeysChainsVMType = "vmtype"
-
-	configKeysRedis = "redis"
-	configKeysDB    = "db"
-)
+const appName = "ortelius"
 
 var (
 	ErrChainsConfigMustBeStringMap = errors.New("Chain config must a string map")
-
-	defaultCommon = map[string]interface{}{
-		configKeysNetworkID:   12345,
-		configKeyLogDirectory: "/tmp/ortelius/logs",
-		configKeysDB: map[string]interface{}{
-			"driver": "mysql",
-			"dsn":    "root:password@tcp(127.0.0.1:3306)/ortelius_dev",
-			"txDB":   false,
-		},
-		configKeysChains: map[string]map[string]interface{}{
-			"4R5p2RXDGLqaifZE4hHWH9owe34pfoBULn1DrQTWivjg8o4aH": {
-				configKeysChainsID:     "4R5p2RXDGLqaifZE4hHWH9owe34pfoBULn1DrQTWivjg8o4aH",
-				configKeysChainsAlias:  "X",
-				configKeysChainsVMType: "avm",
-			},
-			"11111111111111111111111111111111LpoYY": {
-				configKeysChainsID:     "11111111111111111111111111111111LpoYY",
-				configKeysChainsAlias:  "P",
-				configKeysChainsVMType: "pvm",
-			},
-		},
-	}
-
-	defaultJSON = `{
-  "networkID": 12345,
-  "logDirectory": "/tmp/ortelius/logs/producer/avm",
-  "chains": {
-    "11111111111111111111111111111111LpoYY": {
-      "id": "11111111111111111111111111111111LpoYY",
-      "alias": "p",
-      "vmType": "pvm"
-    }
-  },
-
-  "services": {
-    "listenAddr": ":8080",
-    "db": {
-      "dsn": "root:password@tcp(127.0.0.1:3306)/ortelius_dev",
-      "driver": "mysql"
-    },
-    "redis": {
-      "db": 0,
-      "addr": "localhost:6379"
-    }
-  },
-
-  "stream": {
-    "kafka": {
-      "brokers": [
-        "127.0.0.1:29092"
-      ]
-    },
-    "filter": {
-      "min": 1073741824,
-      "max": 2147483648
-    },
-    "producer": {
-      "ipcRoot": "/tmp"
-    },
-    "consumer": {
-      "groupName": "indexer"
-    }
-  }
-
-}
-`
+	ErrChainsConfigIDEmpty         = errors.New("Chain config ID is empty")
+	ErrChainsConfigAliasEmpty      = errors.New("Chain config alias is empty")
+	ErrChainsConfigVMEmpty         = errors.New("Chain config vm type is empty")
+	ErrChainsConfigIDNotString     = errors.New("Chain config ID is not a string")
+	ErrChainsConfigAliasNotString  = errors.New("Chain config alias is not a string")
+	ErrChainsConfigVMNotString     = errors.New("Chain config vm type is not a string")
 )
 
-type Common struct {
+type Config struct {
 	NetworkID uint32
-	ChainsConfig
-	ServiceConfig
+	Logging   logging.Config
+	Chains
+	Stream
+	Services
 }
 
-type ChainConfig struct {
+type Chain struct {
 	ID     ids.ID
 	Alias  string
 	VMType string
 }
 
-type ChainsConfig map[ids.ID]ChainConfig
+type Chains map[ids.ID]Chain
 
-type ServiceConfig struct {
-	Redis   *redis.Options
-	DB      *DBConfig
-	Logging logging.Config
+type Services struct {
+	API
+	*DB
+	Redis *redis.Options
 }
 
-type DBConfig struct {
+type API struct {
+	ListenAddr string
+}
+
+type DB struct {
 	DSN    string
 	Driver string
 	TXDB   bool
 }
 
-func getConfigViper(file string) (*viper.Viper, Common, error) {
-	v := viper.NewWithOptions(viper.KeyDelimiter("_"))
+type Stream struct {
+	Kafka
+	Filter
+	Producer StreamProducer
+	Consumer StreamConsumer
+}
 
-	v.SetEnvPrefix(appName)
-	v.AutomaticEnv()
+type Kafka struct {
+	Brokers []string
+}
 
-	// for key, val := range defaultCommon {
-	// 	v.SetDefault(key, val)
-	// }
-	// for key, val := range defaults {
-	// 	v.SetDefault(key, val)
-	// }
+type Filter struct {
+	Min uint32
+	Max uint32
+}
 
-	if file != "" {
-		v.SetConfigFile(file)
-		v.SetConfigType("json")
+type StreamProducer struct {
+	IPCRoot string
+}
 
-		if err := v.ReadConfig(bytes.NewBufferString(defaultJSON)); err != nil {
-			return nil, Common{}, err
-		}
-		if err := v.ReadInConfig(); err != nil {
-			return nil, Common{}, err
-		}
-	}
+type StreamConsumer struct {
+	StartTime time.Time
+	GroupName string
+}
 
-	common, err := getCommonConfig(v)
+// NewFromFile creates a new *Config with the defaults replaced by the config  in
+// the file at the given path
+func NewFromFile(filePath string) (*Config, error) {
+	v, err := newViperFromFile(filePath)
 	if err != nil {
-		return nil, Common{}, err
+		return nil, err
 	}
 
-	return v, common, nil
-}
+	// Get sub vipers for all objects with parents
+	// chainsViper := newSubViper(v, keysChains)
 
-func getSubViper(v *viper.Viper, name string) *viper.Viper {
-	if v == nil {
-		return nil
-	}
+	servicesViper := newSubViper(v, keysServices)
+	servicesAPIViper := newSubViper(servicesViper, keysServicesAPI)
+	servicesDBViper := newSubViper(servicesViper, keysServicesDB)
+	servicesRedisViper := newSubViper(servicesViper, keysServicesRedis)
 
-	v = v.Sub(name)
-	if v == nil {
-		return nil
-	}
+	streamViper := newSubViper(v, keysStream)
+	streamKafkaViper := newSubViper(streamViper, keysStreamKafka)
+	streamFilterViper := newSubViper(streamViper, keysStreamFilter)
+	streamProducerViper := newSubViper(streamViper, keysStreamProducer)
+	streamConsumerViper := newSubViper(streamViper, keysStreamConsumer)
 
-	v.SetEnvPrefix(appName + "_" + name)
-	v.AutomaticEnv()
-	return v
-}
-
-func getCommonConfig(v *viper.Viper) (Common, error) {
-	var err error
-	c := Common{
-		NetworkID:     v.GetUint32(configKeysNetworkID),
-		ServiceConfig: getServiceConfig(v),
-	}
-	c.ChainsConfig, err = getChainsConfig(v)
-	if err != nil {
-		return c, err
-	}
-
-	return c, nil
-}
-
-func getLogConfig(v *viper.Viper) logging.Config {
+	// Get logging config
 	// We ignore the error because it's related to creating the default directory
 	// but we are going to override it anyways
-	logConf, _ := logging.DefaultConfig()
-	logConf.Directory = v.GetString(configKeyLogDirectory)
-	return logConf
-}
+	logging, _ := logging.DefaultConfig()
+	logging.Directory = v.GetString(keysLogDirectory)
 
-func getChainsConfig(v *viper.Viper) (ChainsConfig, error) {
-	chainsConf := v.GetStringMap(configKeysChains)
-	chains := make(ChainsConfig, len(chainsConf))
-	for _, chainConf := range chainsConf {
-		confMap, ok := chainConf.(map[string]interface{})
-		if !ok {
-			return nil, ErrChainsConfigMustBeStringMap
-		}
-
-		idStr, ok := confMap[configKeysChainsID].(string)
-		if !ok {
-			return nil, ErrChainsConfigMustBeStringMap
-		}
-
-		id, err := ids.FromString(idStr)
-		if err != nil {
-			return nil, err
-		}
-
-		alias, ok := confMap[configKeysChainsAlias].(string)
-		if !ok {
-			return nil, ErrChainsConfigMustBeStringMap
-		}
-
-		vmType, ok := confMap[configKeysChainsVMType].(string)
-		if !ok {
-			return nil, ErrChainsConfigMustBeStringMap
-		}
-
-		chains[id] = ChainConfig{
-			ID:     id,
-			Alias:  alias,
-			VMType: vmType,
-		}
-	}
-	return chains, nil
-}
-
-func getServiceConfig(v *viper.Viper) ServiceConfig {
-	return ServiceConfig{
-		Redis:   getRedisConfig(getSubViper(v, configKeysRedis)),
-		DB:      getDBConfig(getSubViper(v, configKeysDB)),
-		Logging: getLogConfig(v),
-	}
-}
-
-func getRedisConfig(v *viper.Viper) *redis.Options {
-	if v == nil {
-		return nil
-	}
-	opts := &redis.Options{}
-	opts.Addr = v.GetString("addr")
-	opts.Password = v.GetString("password")
-	opts.DB = v.GetInt("db")
-	return opts
-}
-
-func getDBConfig(v *viper.Viper) *DBConfig {
-	if v == nil {
-		return nil
+	// Get chains config
+	chains, err := newChainsConfig(v)
+	if err != nil {
+		return nil, err
 	}
 
-	return &DBConfig{
-		Driver: v.GetString("driver"),
-		DSN:    v.GetString("dsn"),
-		TXDB:   v.GetBool("txDB"),
-	}
+	// Put it all together
+	return &Config{
+		NetworkID: v.GetUint32(keysNetworkID),
+		Logging:   logging,
+		Chains:    chains,
+		Services: Services{
+			API: API{
+				ListenAddr: servicesAPIViper.GetString(keysServicesAPIListenAddr),
+			},
+			DB: &DB{
+				Driver: servicesDBViper.GetString(keysServicesDBDriver),
+				DSN:    servicesDBViper.GetString(keysServicesDBDSN),
+				TXDB:   servicesDBViper.GetBool(keysServicesDBTXDB),
+			},
+			Redis: &redis.Options{
+				Addr:     servicesRedisViper.GetString(keysServicesRedisAddr),
+				Password: servicesRedisViper.GetString(keysServicesRedisPassword),
+				DB:       servicesRedisViper.GetInt(keysServicesRedisDB),
+			},
+		},
+		Stream: Stream{
+			Kafka: Kafka{
+				Brokers: streamKafkaViper.GetStringSlice(keysStreamKafkaBrokers),
+			},
+			Filter: Filter{
+				Min: streamFilterViper.GetUint32(keysStreamFilterMin),
+				Max: streamFilterViper.GetUint32(keysStreamFilterMax),
+			},
+			Producer: StreamProducer{
+				IPCRoot: streamProducerViper.GetString(keysStreamProducerIPCRoot),
+			},
+			Consumer: StreamConsumer{
+				StartTime: streamConsumerViper.GetTime(keysStreamConsumerStartTime),
+				GroupName: streamConsumerViper.GetString(keysStreamConsumerGroupName),
+			},
+		},
+	}, nil
 }

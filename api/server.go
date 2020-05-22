@@ -24,7 +24,7 @@ type Server struct {
 	server *http.Server
 }
 
-func NewServer(conf cfg.APIConfig) (*Server, error) {
+func NewServer(conf cfg.Config) (*Server, error) {
 	log, err := logging.New(conf.Logging)
 	if err != nil {
 		return nil, err

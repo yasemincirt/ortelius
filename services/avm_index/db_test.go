@@ -50,7 +50,7 @@ func newTestIndex(t *testing.T, networkID uint32, chainID ids.ID) (*Index, func(
 	conf.Redis.Addr = s.Addr()
 
 	// Create index
-	idx, err := New(conf.ServiceConfig, networkID, chainID)
+	idx, err := New(conf.Services, networkID, chainID)
 	if err != nil {
 		t.Fatal("Failed to bootstrap index:", err.Error())
 	}

@@ -24,7 +24,7 @@ var (
 	ErrUnknownProcessorType = errors.New("unknown processor type")
 )
 
-type ProcessorFactory func(cfg.StreamConfig, uint32, cfg.ChainConfig) (Processor, error)
+type ProcessorFactory func(cfg.Config, uint32, cfg.Chain) (Processor, error)
 
 // Processor handles writing and reading to/from the event stream
 type Processor interface {
@@ -34,7 +34,7 @@ type Processor interface {
 
 // ProcessorManager reads or writes from/to the event stream backend
 type ProcessorManager struct {
-	conf    cfg.StreamConfig
+	conf    cfg.Config
 	log     *logging.Log
 	factory ProcessorFactory
 
@@ -45,7 +45,7 @@ type ProcessorManager struct {
 }
 
 // NewProcessorManager creates a new *ProcessorManager ready for listening
-func NewProcessorManager(conf cfg.StreamConfig, factory ProcessorFactory) (*ProcessorManager, error) {
+func NewProcessorManager(conf cfg.Config, factory ProcessorFactory) (*ProcessorManager, error) {
 	log, err := logging.New(conf.Logging)
 	if err != nil {
 		return nil, err
@@ -66,9 +66,9 @@ func NewProcessorManager(conf cfg.StreamConfig, factory ProcessorFactory) (*Proc
 func (c *ProcessorManager) Listen() error {
 	// Create a backend for each chain we want to watch and wait for them to exit
 	workerManagerWG := &sync.WaitGroup{}
-	for _, chainConfig := range c.conf.ChainsConfig {
+	for _, chainConfig := range c.conf.Chains {
 		workerManagerWG.Add(1)
-		go func(chainConfig cfg.ChainConfig) {
+		go func(chainConfig cfg.Chain) {
 			defer workerManagerWG.Done()
 			c.log.Info("Started worker manager for chain %s", chainConfig.ID)
 
@@ -83,7 +83,7 @@ func (c *ProcessorManager) Listen() error {
 
 	// Wait for all workers to finish without an error
 	workerManagerWG.Wait()
-	c.log.Debug("All workers stopped")
+	c.log.Info("All workers stopped")
 	close(c.doneCh)
 
 	return nil
@@ -107,7 +107,7 @@ func (c *ProcessorManager) isStopping() bool {
 
 // runProcessor starts the processing loop for the backend and closes it when
 // finished
-func (c *ProcessorManager) runProcessor(chainConfig cfg.ChainConfig) error {
+func (c *ProcessorManager) runProcessor(chainConfig cfg.Chain) error {
 	if c.isStopping() {
 		c.log.Info("Not starting worker for chain %s because we're stopping", chainConfig.ID)
 		return nil
