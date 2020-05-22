@@ -11,8 +11,6 @@ import (
 type Consumable interface {
 	ID() string
 	ChainID() string
-	// ID() ids.ID
-	// ChainID() ids.ID
 	Body() []byte
 	Timestamp() int64
 }
