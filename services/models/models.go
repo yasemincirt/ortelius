@@ -8,8 +8,8 @@ import (
 )
 
 type ChainInfo struct {
-	ID        ids.ID `json:"chainID"`
-	Alias     string `json:"chainAlias"`
-	VM        string `json:"vm"`
-	NetworkID uint32 `json:"networkID"`
+	ID        models.St `json:"chainID"`
+	Alias     string    `json:"chainAlias"`
+	VM        string    `json:"vm"`
+	NetworkID uint32    `json:"networkID"`
 }

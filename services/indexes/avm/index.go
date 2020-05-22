@@ -1,7 +1,7 @@
 // (c) 2020, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-package avm_index
+package avm
 
 import (
 	"github.com/ava-labs/gecko/database"
@@ -53,6 +53,8 @@ func newForConnections(conns *services.Connections, networkID uint32, chainID id
 		db:        NewDB(conns.Stream(), conns.DB(), chainID, vm.Codec()),
 	}, nil
 }
+
+func (i *Index) Name() string { return "avm-index" }
 
 func (i *Index) Bootstrap() error {
 	platformGenesisBytes, err := genesis.Genesis(i.networkID)

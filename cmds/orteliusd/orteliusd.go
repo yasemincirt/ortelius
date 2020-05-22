@@ -4,6 +4,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -18,7 +20,7 @@ import (
 	"github.com/ava-labs/ortelius/stream/consumers"
 
 	// Register service plugins
-	_ "github.com/ava-labs/ortelius/services/avm_index"
+	_ "github.com/ava-labs/ortelius/services/indexes/avm"
 )
 
 const (
@@ -40,6 +42,9 @@ const (
 
 	streamBroadcasterCmdUse  = "broadcaster"
 	streamBroadcasterCmdDesc = "Runs the stream broadcaster daemon"
+
+	envCmdUse  = "env"
+	envCmdDesc = "Displays information about the Ortelius environment"
 )
 
 // listenCloser listens for messages until it's asked to close
@@ -74,7 +79,10 @@ func execute() error {
 
 	// Add flags and commands
 	cmd.PersistentFlags().StringVarP(configFile, "config", "c", "config.json", "")
-	cmd.AddCommand(createStreamCmds(config, &runErr), createAPICmds(config, &runErr))
+	cmd.AddCommand(
+		createStreamCmds(config, &runErr),
+		createAPICmds(config, &runErr),
+		createEnvCmds(config, &runErr))
 
 	// Execute the command and return the runErr to the caller
 	if err := cmd.Execute(); err != nil {
@@ -130,6 +138,23 @@ func createStreamCmds(config *cfg.Config, runErr *error) *cobra.Command {
 	})
 
 	return streamCmd
+}
+
+func createEnvCmds(config *cfg.Config, runErr *error) *cobra.Command {
+	return &cobra.Command{
+		Use:   envCmdUse,
+		Short: envCmdDesc,
+		Long:  envCmdDesc,
+		Run: func(_ *cobra.Command, _ []string) {
+			configBytes, err := json.MarshalIndent(config, "", "    ")
+			if err != nil {
+				*runErr = err
+				return
+			}
+
+			fmt.Println(string(configBytes))
+		},
+	}
 }
 
 // runListenCloser runs the listenCloser until signaled to stop

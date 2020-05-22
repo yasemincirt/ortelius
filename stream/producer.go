@@ -37,14 +37,14 @@ func NewProducer(conf cfg.Config, _ uint32, chainConfig cfg.Chain) (Processor, e
 	}
 
 	var err error
-	p.sock, err = createIPCSocket("ipc://" + path.Join(conf.Producer.IPCRoot, chainConfig.ID.String()) + ".ipc")
+	p.sock, err = createIPCSocket("ipc://" + path.Join(conf.Producer.IPCRoot, chainConfig.ID) + ".ipc")
 	if err != nil {
 		return nil, err
 	}
 
 	p.writer = kafka.NewWriter(kafka.WriterConfig{
 		Brokers:  conf.Brokers,
-		Topic:    chainConfig.ID.String(),
+		Topic:    chainConfig.ID,
 		Balancer: &kafka.LeastBytes{},
 	})
 

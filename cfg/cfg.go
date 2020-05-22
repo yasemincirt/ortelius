@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/logging"
 	"github.com/go-redis/redis"
 )
@@ -33,12 +32,12 @@ type Config struct {
 }
 
 type Chain struct {
-	ID     ids.ID
+	ID     string
 	Alias  string
 	VMType string
 }
 
-type Chains map[ids.ID]Chain
+type Chains map[string]Chain
 
 type Services struct {
 	API

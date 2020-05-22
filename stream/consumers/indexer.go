@@ -6,8 +6,8 @@ package consumers
 import (
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
-	"github.com/ava-labs/ortelius/services/avm_index"
-	"github.com/ava-labs/ortelius/services/pvm_index"
+	"github.com/ava-labs/ortelius/services/indexes/avm"
+	"github.com/ava-labs/ortelius/services/indexes/pvm"
 	"github.com/ava-labs/ortelius/stream"
 )
 
@@ -17,10 +17,10 @@ func NewIndexerFactory() stream.ProcessorFactory {
 
 func createIndexerConsumer(conf cfg.Config, networkID uint32, chainConfig cfg.Chain) (indexer services.Consumer, err error) {
 	switch chainConfig.VMType {
-	case avm_index.VMName:
-		indexer, err = avm_index.New(conf.Services, networkID, chainConfig.ID)
-	case pvm_index.VMName:
-		indexer, err = pvm_index.New(conf.Services, networkID, chainConfig.ID)
+	case avm.VMName:
+		indexer, err = avm.New(conf.Services, networkID, chainConfig.ID)
+	case pvm.VMName:
+		indexer, err = pvm.New(conf.Services, networkID, chainConfig.ID)
 	default:
 		return nil, stream.ErrUnknownVM
 	}

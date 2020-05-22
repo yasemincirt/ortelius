@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"log"
 
-	"github.com/ava-labs/gecko/ids"
 	"github.com/spf13/viper"
 )
 
@@ -73,14 +72,9 @@ func newChainsConfig(v *viper.Viper) (Chains, error) {
 		}
 
 		// Convert to proper types
-		idStr, ok := confMap[keysChainsID].(string)
+		id, ok := confMap[keysChainsID].(string)
 		if !ok {
 			return nil, ErrChainsConfigIDNotString
-		}
-
-		id, err := ids.FromString(idStr)
-		if err != nil {
-			return nil, err
 		}
 
 		alias, ok := confMap[keysChainsAlias].(string)

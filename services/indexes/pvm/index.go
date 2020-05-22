@@ -1,7 +1,7 @@
 // (c) 2020, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-package pvm_index
+package pvm
 
 import (
 	"github.com/ava-labs/gecko/ids"
@@ -35,6 +35,8 @@ func newForConnections(conns *services.Connections, networkID uint32, chainID id
 	db := NewDBIndex(conns.Stream(), conns.DB(), networkID, chainID, platformvm.Codec)
 	return &Index{networkID, chainID, db}
 }
+
+func (i *Index) Name() string { return "pvm-index" }
 
 func (i *Index) GetChainInfo(alias string, networkID uint32) (*models.ChainInfo, error) {
 	return &models.ChainInfo{

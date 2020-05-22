@@ -18,6 +18,7 @@ type Consumable interface {
 
 // Consumer takes in Consumables and adds them to the service's backend
 type Consumer interface {
+	Name() string
 	Bootstrap() error
 	Consume(Consumable) error
 }

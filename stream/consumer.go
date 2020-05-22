@@ -5,7 +5,6 @@ package stream
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/ava-labs/gecko/ids"
@@ -38,20 +37,25 @@ func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
 			return nil, err
 		}
 
-		// Bootstrap our index
+		// Bootstrap our service
 		if err = c.consumer.Bootstrap(); err != nil {
 			return nil, err
 		}
 
+		// Setup config
+		groupName := conf.Consumer.GroupName
+		if groupName == "" {
+			groupName = c.consumer.Name()
+		}
 		if !conf.Consumer.StartTime.IsZero() {
-			conf.Consumer.GroupName = ""
+			groupName = ""
 		}
 
 		// Create reader for the topic
 		c.reader = kafka.NewReader(kafka.ReaderConfig{
-			Topic:    chainConfig.ID.String(),
+			Topic:    chainConfig.ID,
 			Brokers:  conf.Kafka.Brokers,
-			GroupID:  conf.Consumer.GroupName,
+			GroupID:  groupName,
 			MaxBytes: 10e6,
 		})
 
@@ -60,9 +64,7 @@ func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
 			ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(readTimeout))
 			defer cancelFn()
 
-			fmt.Println("Setting offset to:", conf.Consumer.StartTime.String())
-			err = c.reader.SetOffsetAt(ctx, conf.Consumer.StartTime)
-			if err != nil {
+			if err = c.reader.SetOffsetAt(ctx, conf.Consumer.StartTime); err != nil {
 				return nil, err
 			}
 		}

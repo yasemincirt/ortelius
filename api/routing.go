@@ -75,7 +75,7 @@ func newRouter(conf cfg.Config) (*web.Router, error) {
 		}
 
 		// Create a Router for the chainID and one for the alias if an alias exists
-		if err = createRouterAtPath(chainID.String()); err != nil {
+		if err = createRouterAtPath(chainID); err != nil {
 			return nil, err
 		}
 		if chainConfig.Alias != "" {
