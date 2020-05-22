@@ -15,12 +15,12 @@ func NewIndexerFactory() stream.ProcessorFactory {
 	return stream.NewConsumerFactory(createIndexerConsumer)
 }
 
-func createIndexerConsumer(conf cfg.Config, networkID uint32, chainConfig cfg.Chain) (indexer services.Consumer, err error) {
-	switch chainConfig.VMType {
+func createIndexerConsumer(conf cfg.Config, networkID uint32, chainVM string, chainID string) (indexer services.Consumer, err error) {
+	switch chainVM {
 	case avm.VMName:
-		indexer, err = avm.New(conf.Services, networkID, chainConfig.ID)
+		indexer, err = avm.New(conf.Services, networkID, chainID)
 	case pvm.VMName:
-		indexer, err = pvm.New(conf.Services, networkID, chainConfig.ID)
+		indexer, err = pvm.New(conf.Services, networkID, chainID)
 	default:
 		return nil, stream.ErrUnknownVM
 	}

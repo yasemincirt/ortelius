@@ -13,6 +13,6 @@ func NewBroadcasterFactory() stream.ProcessorFactory {
 	return stream.NewConsumerFactory(createBroadcasterConsumer)
 }
 
-func createBroadcasterConsumer(conf cfg.Config, networkID uint32, chainConfig cfg.Chain) (indexer services.Consumer, err error) {
-	return services.NewBroadcaster(chainConfig), nil
+func createBroadcasterConsumer(c cfg.Config, _ uint32, chainVM string, chainID string) (indexer services.Consumer, err error) {
+	return services.NewBroadcaster(c, chainVM, chainID), nil
 }

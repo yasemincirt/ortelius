@@ -4,6 +4,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/ava-labs/gecko/utils/hashing"
 	"github.com/spf13/cobra"
 
 	"github.com/ava-labs/ortelius/api"
@@ -42,6 +44,9 @@ const (
 
 	streamBroadcasterCmdUse  = "broadcaster"
 	streamBroadcasterCmdDesc = "Runs the stream broadcaster daemon"
+
+	streamAddCmdUse  = "add"
+	streamAddCmdDesc = "Adds an event to the stream"
 
 	envCmdUse  = "env"
 	envCmdDesc = "Displays information about the Ortelius environment"
@@ -124,7 +129,7 @@ func createStreamCmds(config *cfg.Config, runErr *error) *cobra.Command {
 		Use:   streamProducerCmdUse,
 		Short: streamProducerCmdDesc,
 		Long:  streamProducerCmdDesc,
-		Run:   runStreamProcessorManager(config, runErr, stream.NewProducer),
+		Run:   runStreamProcessorManager(config, runErr, stream.NewProducerProcessor),
 	}, &cobra.Command{
 		Use:   streamIndexerCmdUse,
 		Short: streamIndexerCmdDesc,
@@ -135,6 +140,34 @@ func createStreamCmds(config *cfg.Config, runErr *error) *cobra.Command {
 		Short: streamBroadcasterCmdDesc,
 		Long:  streamBroadcasterCmdDesc,
 		Run:   runStreamProcessorManager(config, runErr, consumers.NewBroadcasterFactory()),
+	}, &cobra.Command{
+		Use:   streamAddCmdUse,
+		Short: streamAddCmdDesc,
+		Long:  streamAddCmdDesc,
+		Args:  cobra.ExactArgs(2),
+		Run: func(_ *cobra.Command, args []string) {
+			chainID, hexMsg := args[0], args[1]
+
+			rawMsg, err := hex.DecodeString(hexMsg)
+			if err != nil {
+				*runErr = err
+				return
+			}
+
+			p, err := stream.NewProducer(*config, 0, "", chainID)
+			if err != nil {
+				*runErr = err
+				return
+			}
+
+			_, err = p.Write(rawMsg)
+			if err != nil {
+				*runErr = err
+				return
+			}
+
+			fmt.Println("Sent message", hashing.ComputeHash256(rawMsg))
+		},
 	})
 
 	return streamCmd

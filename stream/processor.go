@@ -17,18 +17,19 @@ import (
 )
 
 var (
-	readTimeout = 10 * time.Second
+	readTimeout  = 10 * time.Second
+	writeTimeout = 10 * time.Second
 
 	// ErrUnknownProcessorType is returned when encountering a client type with no
 	// known implementation
 	ErrUnknownProcessorType = errors.New("unknown processor type")
 )
 
-type ProcessorFactory func(cfg.Config, uint32, cfg.Chain) (Processor, error)
+type ProcessorFactory func(cfg.Config, uint32, string, string) (Processor, error)
 
 // Processor handles writing and reading to/from the event stream
 type Processor interface {
-	ProcessNextMessage(context.Context) (*Message, error)
+	ProcessNextMessage(context.Context) error
 	Close() error
 }
 
@@ -123,7 +124,7 @@ func (c *ProcessorManager) runProcessor(chainConfig cfg.Chain) error {
 	defer c.log.Info("Exiting worker for chain %s", chainConfig.ID)
 
 	// Create a backend to get messages from
-	backend, err := c.factory(c.conf, c.conf.NetworkID, chainConfig)
+	backend, err := c.factory(c.conf, c.conf.NetworkID, chainConfig.VMType, chainConfig.ID)
 	if err != nil {
 		// panic(err)
 		return err
@@ -139,8 +140,7 @@ func (c *ProcessorManager) runProcessor(chainConfig cfg.Chain) error {
 			ctx, cancelFn = context.WithTimeout(context.Background(), readTimeout)
 			defer cancelFn()
 
-			msg, err = backend.ProcessNextMessage(ctx)
-
+			err = backend.ProcessNextMessage(ctx)
 			switch err {
 			case nil:
 				c.log.Info("Processed message %s on chain %s", msg.ID(), msg.ChainID())

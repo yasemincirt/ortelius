@@ -13,8 +13,8 @@ type Broadcaster struct {
 	chainConfig cfg.Chain
 }
 
-func NewBroadcaster(chainConfig cfg.Chain) *Broadcaster {
-	return &Broadcaster{chainConfig: chainConfig}
+func NewBroadcaster(c cfg.Config, chainVM string, chainID string) *Broadcaster {
+	return &Broadcaster{}
 }
 
 func (*Broadcaster) Name() string { return "broadcaster" }

@@ -15,7 +15,7 @@ import (
 	"github.com/ava-labs/ortelius/stream/record"
 )
 
-type serviceConsumerFactory func(cfg.Config, uint32, cfg.Chain) (services.Consumer, error)
+type serviceConsumerFactory func(cfg.Config, uint32, string, string) (services.Consumer, error)
 
 // consumer takes events from Kafka and sends them to a service consumer
 type consumer struct {
@@ -25,14 +25,14 @@ type consumer struct {
 
 // NewConsumerFactory returns a processorFactory for the given service consumer
 func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
-	return func(conf cfg.Config, networkID uint32, chainConfig cfg.Chain) (Processor, error) {
+	return func(conf cfg.Config, networkID uint32, chainVM string, chainID string) (Processor, error) {
 		var (
 			err error
 			c   = &consumer{}
 		)
 
 		// Create consumer backend
-		c.consumer, err = factory(conf, networkID, chainConfig)
+		c.consumer, err = factory(conf, networkID, chainVM, chainID)
 		if err != nil {
 			return nil, err
 		}
@@ -53,7 +53,7 @@ func NewConsumerFactory(factory serviceConsumerFactory) ProcessorFactory {
 
 		// Create reader for the topic
 		c.reader = kafka.NewReader(kafka.ReaderConfig{
-			Topic:    chainConfig.ID,
+			Topic:    chainID,
 			Brokers:  conf.Kafka.Brokers,
 			GroupID:  groupName,
 			MaxBytes: 10e6,
@@ -79,12 +79,12 @@ func (c *consumer) Close() error {
 }
 
 // ProcessNextMessage waits for a new Message and adds it to the services
-func (c *consumer) ProcessNextMessage(ctx context.Context) (*Message, error) {
+func (c *consumer) ProcessNextMessage(ctx context.Context) error {
 	msg, err := getNextMessage(ctx, c.reader)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return msg, c.consumer.Consume(msg)
+	return c.consumer.Consume(msg)
 }
 
 // getNextMessage gets the next Message from the Kafka Indexer
