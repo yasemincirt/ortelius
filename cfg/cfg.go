@@ -6,9 +6,6 @@ package cfg
 import (
 	"errors"
 	"time"
-
-	"github.com/ava-labs/gecko/utils/logging"
-	"github.com/go-redis/redis"
 )
 
 const appName = "ortelius"
@@ -24,60 +21,65 @@ var (
 )
 
 type Config struct {
-	NetworkID uint32
-	Logging   logging.Config
-	Chains
-	Stream
-	Services
+	NetworkID    uint32 `json:"networkID"`
+	LogDirectory string `json:"logDirectory"`
+	Chains       `json:"chains"`
+	Stream       `json:"stream"`
+	Services     `json:"services"`
 }
 
 type Chain struct {
-	ID     string
-	Alias  string
-	VMType string
+	ID     string `json:"id"`
+	Alias  string `json:"alias"`
+	VMType string `json:"vmType"`
 }
 
 type Chains map[string]Chain
 
 type Services struct {
-	API
-	*DB
-	Redis *redis.Options
+	API    `json:"api"`
+	*DB    `json:"db"`
+	*Redis `json:"redis"`
 }
 
 type API struct {
-	ListenAddr string
+	ListenAddr string `json:"listenAddr"`
 }
 
 type DB struct {
-	DSN    string
-	Driver string
-	TXDB   bool
+	DSN    string `json:"dsn"`
+	Driver string `json:"driver"`
+	TXDB   bool   `json:"txDB"`
+}
+type Redis struct {
+	Addr     string `json:"addr"`
+	Password string `json:"password"`
+	DB       int    `json:"db"`
 }
 
 type Stream struct {
-	Kafka
-	Filter
-	Producer StreamProducer
-	Consumer StreamConsumer
+	Kafka    `json:"kafka"`
+	Filter   `json:"filter"`
+	Producer StreamProducer `json:"producer"`
+	Consumer StreamConsumer `json:"consumer"`
 }
 
 type Kafka struct {
-	Brokers []string
+	Brokers []string `json:"brokers"`
 }
 
 type Filter struct {
-	Min uint32
-	Max uint32
+	Min uint32 `json:"min"`
+	Max uint32 `json:"max"`
 }
 
 type StreamProducer struct {
-	IPCRoot string
+	IPCRoot string `json:"ipcRoot"`
 }
 
 type StreamConsumer struct {
-	StartTime time.Time
-	GroupName string
+	StartTime time.Time `json:"startTime"`
+	GroupName string    `json:"groupName"`
 }
 
 // NewFromFile creates a new *Config with the defaults replaced by the config  in
@@ -100,12 +102,6 @@ func NewFromFile(filePath string) (*Config, error) {
 	streamProducerViper := newSubViper(streamViper, keysStreamProducer)
 	streamConsumerViper := newSubViper(streamViper, keysStreamConsumer)
 
-	// Get logging config
-	// We ignore the error because it's related to creating the default directory
-	// but we are going to override it anyways
-	logging, _ := logging.DefaultConfig()
-	logging.Directory = v.GetString(keysLogDirectory)
-
 	// Get chains config
 	chains, err := newChainsConfig(v)
 	if err != nil {
@@ -114,9 +110,9 @@ func NewFromFile(filePath string) (*Config, error) {
 
 	// Put it all together
 	return &Config{
-		NetworkID: v.GetUint32(keysNetworkID),
-		Logging:   logging,
-		Chains:    chains,
+		NetworkID:    v.GetUint32(keysNetworkID),
+		LogDirectory: v.GetString(keysLogDirectory),
+		Chains:       chains,
 		Services: Services{
 			API: API{
 				ListenAddr: servicesAPIViper.GetString(keysServicesAPIListenAddr),
@@ -126,7 +122,7 @@ func NewFromFile(filePath string) (*Config, error) {
 				DSN:    servicesDBViper.GetString(keysServicesDBDSN),
 				TXDB:   servicesDBViper.GetBool(keysServicesDBTXDB),
 			},
-			Redis: &redis.Options{
+			Redis: &Redis{
 				Addr:     servicesRedisViper.GetString(keysServicesRedisAddr),
 				Password: servicesRedisViper.GetString(keysServicesRedisPassword),
 				DB:       servicesRedisViper.GetInt(keysServicesRedisDB),

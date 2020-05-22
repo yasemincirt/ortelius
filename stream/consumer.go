@@ -114,8 +114,8 @@ func getNextMessage(ctx context.Context, r *kafka.Reader) (*Message, error) {
 	}
 
 	return &Message{
-		id:        id,
-		chainID:   chainID,
+		id:        id.String(),
+		chainID:   chainID.String(),
 		body:      body,
 		timestamp: msg.Time.UTC().Unix(),
 	}, nil

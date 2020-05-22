@@ -78,8 +78,9 @@ func (p *producer) ProcessNextMessage(ctx context.Context) (*Message, error) {
 	}
 
 	// Create a Message object
+	msgHash := hashing.ComputeHash256Array(rawMsg)
 	msg := &Message{
-		id:      ids.NewID(hashing.ComputeHash256Array(rawMsg)),
+		id:      ids.NewID(msgHash).String(),
 		chainID: p.chainID,
 		body:    record.Marshal(rawMsg),
 	}
@@ -87,7 +88,7 @@ func (p *producer) ProcessNextMessage(ctx context.Context) (*Message, error) {
 	// Send Message to Kafka
 	err = p.writer.WriteMessages(ctx, kafka.Message{
 		Value: msg.body,
-		Key:   msg.id.Bytes(),
+		Key:   msgHash[:],
 	})
 	if err != nil {
 		return nil, err

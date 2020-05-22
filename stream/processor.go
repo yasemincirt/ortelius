@@ -46,7 +46,13 @@ type ProcessorManager struct {
 
 // NewProcessorManager creates a new *ProcessorManager ready for listening
 func NewProcessorManager(conf cfg.Config, factory ProcessorFactory) (*ProcessorManager, error) {
-	log, err := logging.New(conf.Logging)
+	loggingConf, err := logging.DefaultConfig()
+	if err != nil {
+		return nil, err
+	}
+	loggingConf.Directory = conf.LogDirectory
+
+	log, err := logging.New(loggingConf)
 	if err != nil {
 		return nil, err
 	}

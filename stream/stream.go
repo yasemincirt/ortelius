@@ -5,8 +5,6 @@ package stream
 
 import (
 	"errors"
-
-	"github.com/ava-labs/gecko/ids"
 )
 
 var (
@@ -15,13 +13,13 @@ var (
 
 // Message is a message on the event stream
 type Message struct {
-	id        ids.ID
-	chainID   ids.ID
+	id        string
+	chainID   string
 	body      []byte
 	timestamp int64
 }
 
-func (m *Message) ID() ids.ID       { return m.id }
-func (m *Message) ChainID() ids.ID  { return m.chainID }
+func (m *Message) ID() string       { return m.id }
+func (m *Message) ChainID() string  { return m.chainID }
 func (m *Message) Body() []byte     { return m.body }
 func (m *Message) Timestamp() int64 { return m.timestamp }

@@ -4,14 +4,15 @@ import (
 	"context"
 	"time"
 
-	"github.com/ava-labs/gecko/ids"
 	"github.com/gocraft/dbr"
 	"github.com/gocraft/health"
 )
 
 type Consumable interface {
-	ID() ids.ID
-	ChainID() ids.ID
+	ID() string
+	ChainID() string
+	// ID() ids.ID
+	// ChainID() ids.ID
 	Body() []byte
 	Timestamp() int64
 }
