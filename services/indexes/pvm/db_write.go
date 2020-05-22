@@ -112,7 +112,7 @@ func (db *DB) indexCommonBlock(ctx services.ConsumerCtx, blkType BlockType, blk 
 		Pair("id", blk.ID().String()).
 		Pair("type", blkType).
 		Pair("parent_id", blk.ParentID().String()).
-		Pair("chain_id", db.chainID.String()).
+		Pair("chain_id", db.chainID).
 		Pair("serialization", blockBytes).
 		Pair("created_at", ctx.Time()).
 		Exec()
@@ -221,7 +221,7 @@ func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, blockID ids.ID, tx *p
 			InsertInto("pvm_chains_fx_ids").
 			Columns("chain_id", "fx_id")
 		for _, fxID := range tx.FxIDs {
-			builder.Values(db.chainID.String(), fxID.String())
+			builder.Values(db.chainID, fxID.String())
 		}
 		_, err = builder.Exec()
 		if err != nil && !errIsDuplicateEntryError(err) {
@@ -235,7 +235,7 @@ func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, blockID ids.ID, tx *p
 			InsertInto("pvm_chains_control_signatures").
 			Columns("chain_id", "signature")
 		for _, sig := range tx.ControlSigs {
-			builder.Values(db.chainID.String(), sig[:])
+			builder.Values(db.chainID, sig[:])
 		}
 		_, err = builder.Exec()
 		if err != nil && !errIsDuplicateEntryError(err) {
@@ -256,7 +256,7 @@ func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, blockID ids.ID, tx *
 		InsertInto("pvm_subnets").
 		Pair("id", tx.ID()).
 		Pair("network_id", tx.NetworkID).
-		Pair("chain_id", db.chainID.String()).
+		Pair("chain_id", db.chainID).
 		Pair("threshold", tx.Threshold).
 		Pair("created_at", ctx.Time()).
 		Exec()
@@ -269,7 +269,7 @@ func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, blockID ids.ID, tx *
 		InsertInto("pvm_subnet_control_keys").
 		Columns("subnet_id", "address")
 	for _, address := range tx.ControlKeys {
-		builder.Values(db.chainID.String(), address.String())
+		builder.Values(db.chainID, address.String())
 	}
 	_, err = builder.Exec()
 	if err != nil && !errIsDuplicateEntryError(err) {

@@ -23,7 +23,7 @@ import (
 
 // producer reads from the socket and writes to the event stream
 type producer struct {
-	chainID     ids.ID
+	chainID     string
 	sock        protocol.Socket
 	binFilterFn binFilterFn
 	writer      *kafka.Writer

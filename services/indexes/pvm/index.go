@@ -4,7 +4,6 @@
 package pvm
 
 import (
-	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/vms/platformvm"
 
 	"github.com/ava-labs/ortelius/api"
@@ -19,11 +18,11 @@ func init() {
 
 type Index struct {
 	networkID uint32
-	chainID   ids.ID
+	chainID   string
 	db        *DB
 }
 
-func New(conf cfg.Services, networkID uint32, chainID ids.ID) (*Index, error) {
+func New(conf cfg.Services, networkID uint32, chainID string) (*Index, error) {
 	conns, err := services.NewConnectionsFromConfig(conf)
 	if err != nil {
 		return nil, err
@@ -31,7 +30,7 @@ func New(conf cfg.Services, networkID uint32, chainID ids.ID) (*Index, error) {
 	return newForConnections(conns, networkID, chainID), nil
 }
 
-func newForConnections(conns *services.Connections, networkID uint32, chainID ids.ID) *Index {
+func newForConnections(conns *services.Connections, networkID uint32, chainID string) *Index {
 	db := NewDBIndex(conns.Stream(), conns.DB(), networkID, chainID, platformvm.Codec)
 	return &Index{networkID, chainID, db}
 }
@@ -40,7 +39,7 @@ func (i *Index) Name() string { return "pvm-index" }
 
 func (i *Index) GetChainInfo(alias string, networkID uint32) (*models.ChainInfo, error) {
 	return &models.ChainInfo{
-		ID:        i.chainID,
+		ID:        models.StringID(i.chainID),
 		Alias:     alias,
 		NetworkID: networkID,
 		VM:        VMName,

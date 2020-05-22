@@ -142,7 +142,7 @@ func (r *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, tx *a
 	_, err = ctx.DB().
 		InsertInto("avm_assets").
 		Pair("id", txID.String()).
-		Pair("chain_Id", r.chainID.String()).
+		Pair("chain_Id", r.chainID).
 		Pair("name", tx.Name).
 		Pair("symbol", tx.Symbol).
 		Pair("denomination", tx.Denomination).
@@ -156,7 +156,7 @@ func (r *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, tx *a
 	_, err = ctx.DB().
 		InsertInto("avm_transactions").
 		Pair("id", txID.String()).
-		Pair("chain_id", r.chainID.String()).
+		Pair("chain_id", r.chainID).
 		Pair("type", TXTypeCreateAsset).
 		Pair("created_at", ctx.Time()).
 		Pair("canonical_serialization", txBytes).

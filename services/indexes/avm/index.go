@@ -28,12 +28,12 @@ func init() {
 
 type Index struct {
 	networkID uint32
-	chainID   ids.ID
+	chainID   string
 	db        *DB
 	cache     *Redis
 }
 
-func New(conf cfg.Services, networkID uint32, chainID ids.ID) (*Index, error) {
+func New(conf cfg.Services, networkID uint32, chainID string) (*Index, error) {
 	conns, err := services.NewConnectionsFromConfig(conf)
 	if err != nil {
 		return nil, err
@@ -41,8 +41,13 @@ func New(conf cfg.Services, networkID uint32, chainID ids.ID) (*Index, error) {
 	return newForConnections(conns, networkID, chainID)
 }
 
-func newForConnections(conns *services.Connections, networkID uint32, chainID ids.ID) (*Index, error) {
-	vm, err := newAVM(chainID, networkID)
+func newForConnections(conns *services.Connections, networkID uint32, chainID string) (*Index, error) {
+	id, err := ids.FromString(chainID)
+	if err != nil {
+		return nil, err
+	}
+
+	vm, err := newAVM(id, networkID)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +100,7 @@ func (i *Index) Consume(ingestable services.Consumable) error {
 
 func (i *Index) GetChainInfo(alias string, networkID uint32) (*models.ChainInfo, error) {
 	return &models.ChainInfo{
-		ID:        i.chainID,
+		ID:        models.StringID(i.chainID),
 		Alias:     alias,
 		NetworkID: networkID,
 		VM:        VMName,
