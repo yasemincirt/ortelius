@@ -270,7 +270,8 @@ func (db *DB) ListTransactions(ctx context.Context, p *ListTransactionsParams) (
 		p.ListParams = params.ListParams{}
 		err := p.Apply(dbRunner.
 			Select("COUNT(avm_transactions.id)").
-			From("avm_transactions")).
+			From("avm_transactions").
+			Where("avm_transactions.chain_id = ?", db.chainID)).
 			LoadOneContext(ctx, &count)
 		if err != nil {
 			return nil, err
@@ -292,7 +293,7 @@ func (db *DB) ListAssets(ctx context.Context, p *ListAssetsParams) (*AssetList, 
 	_, err := p.Apply(dbRunner.
 		Select("id", "chain_id", "name", "symbol", "alias", "denomination", "current_supply", "created_at").
 		From("avm_assets").
-		Where("chain_id = ?", db.chainID)).
+		Where("avm_assets.chain_id = ?", db.chainID)).
 		LoadContext(ctx, &assets)
 	if err != nil {
 		return nil, err
@@ -304,7 +305,7 @@ func (db *DB) ListAssets(ctx context.Context, p *ListAssetsParams) (*AssetList, 
 		err := p.Apply(dbRunner.
 			Select("COUNT(avm_assets.id)").
 			From("avm_assets").
-			Where("chain_id = ?", db.chainID)).
+			Where("avm_assets.chain_id = ?", db.chainID)).
 			LoadOneContext(ctx, &count)
 		if err != nil {
 			return nil, err
@@ -353,7 +354,8 @@ func (db *DB) ListOutputs(ctx context.Context, p *ListOutputsParams) (*OutputLis
 	outputs := []*Output{}
 	_, err := p.Apply(dbRunner.
 		Select(outputSelectColumns...).
-		From("avm_outputs")).LoadContext(ctx, &outputs)
+		From("avm_outputs").
+		Where("avm_outputs.chain_id = ?", db.chainID)).LoadContext(ctx, &outputs)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +399,8 @@ func (db *DB) ListOutputs(ctx context.Context, p *ListOutputsParams) (*OutputLis
 		p.ListParams = params.ListParams{}
 		err = p.Apply(dbRunner.
 			Select("COUNT(avm_outputs.id)").
-			From("avm_outputs")).
+			From("avm_outputs").
+			Where("avm_outputs.chain_id = ?", db.chainID)).
 			LoadOneContext(ctx, &count)
 		if err != nil {
 			return nil, err
@@ -416,6 +419,7 @@ func (db *DB) getFirstTransactionTime(ctx context.Context) (time.Time, error) {
 	err := db.newSession("get_first_transaction_time").
 		Select("COALESCE(UNIX_TIMESTAMP(MIN(created_at)), 0)").
 		From("avm_transactions").
+		Where("avm_transactions.chain_id = ?", db.chainID).
 		LoadOneContext(ctx, &ts)
 	if err != nil {
 		return time.Time{}, err
