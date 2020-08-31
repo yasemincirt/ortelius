@@ -6,7 +6,7 @@ package consumers
 import (
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
-	"github.com/ava-labs/ortelius/services/indexes/avm"
+	"github.com/ava-labs/ortelius/services/index/avm"
 	"github.com/ava-labs/ortelius/stream"
 )
 

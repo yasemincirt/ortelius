@@ -20,7 +20,7 @@ import (
 	"github.com/ava-labs/ortelius/stream/consumers"
 
 	// Register service plugins
-	_ "github.com/ava-labs/ortelius/services/indexes/avm"
+	_ "github.com/ava-labs/ortelius/services/index/avm"
 )
 
 const (

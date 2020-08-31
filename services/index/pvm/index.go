@@ -50,7 +50,7 @@ func (i *Index) GetChainInfo(alias string, networkID uint32) (*models.ChainInfo,
 }
 
 func (i *Index) Consume(ctx context.Context, ingestable services.Consumable) error {
-	return i.db.Consume(ctx, ingestable)
+	return i.db.Index(ctx, ingestable)
 }
 func (i *Index) Bootstrap(ctx context.Context) error { return i.db.Bootstrap(ctx) }
 func (i *Index) ListBlocks(ctx context.Context, p ListBlocksParams) (*BlockList, error) {

@@ -23,10 +23,13 @@ import (
 	"github.com/ava-labs/ortelius/api"
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
+	"github.com/ava-labs/ortelius/services/index"
 	"github.com/ava-labs/ortelius/services/models"
 )
 
 var (
+	VMName = "avm"
+
 	ErrIncorrectGenesisChainTxType = errors.New("incorrect genesis chain tx type")
 )
 
@@ -104,27 +107,27 @@ func (i *Index) Consume(ctx context.Context, ingestable services.Consumable) err
 
 func (i *Index) GetChainInfo(alias string, avaxAssetID string) (*models.ChainInfo, error) {
 	return &models.ChainInfo{
+		Alias:       alias,
+		VM:          VMName,
 		NetworkID:   i.networkID,
 		ID:          models.StringID(i.chainID),
 		AVAXAssetID: models.StringID(avaxAssetID),
-		Alias:       alias,
-		VM:          VMName,
 	}, nil
 }
 
-func (i *Index) Search(ctx context.Context, params *SearchParams) (*SearchResults, error) {
+func (i *Index) Search(ctx context.Context, params *SearchParams) (*index.SearchResults, error) {
 	return i.db.Search(ctx, params)
 }
 
-func (i *Index) Aggregate(ctx context.Context, params *AggregateParams) (*AggregatesHistogram, error) {
+func (i *Index) Aggregate(ctx context.Context, params *AggregateParams) (*index.AggregatesHistogram, error) {
 	return i.db.Aggregate(ctx, params)
 }
 
-func (i *Index) ListTransactions(ctx context.Context, params *ListTransactionsParams) (*TransactionList, error) {
+func (i *Index) ListTransactions(ctx context.Context, params *ListTransactionsParams) (*index.TransactionList, error) {
 	return i.db.ListTransactions(ctx, params)
 }
 
-func (i *Index) GetTransaction(ctx context.Context, id ids.ID) (*Transaction, error) {
+func (i *Index) GetTransaction(ctx context.Context, id ids.ID) (*index.Transaction, error) {
 	txList, err := i.db.ListTransactions(ctx, &ListTransactionsParams{ID: &id})
 	if err != nil {
 		return nil, err
@@ -135,11 +138,11 @@ func (i *Index) GetTransaction(ctx context.Context, id ids.ID) (*Transaction, er
 	return nil, nil
 }
 
-func (i *Index) ListAssets(ctx context.Context, params *ListAssetsParams) (*AssetList, error) {
+func (i *Index) ListAssets(ctx context.Context, params *ListAssetsParams) (*index.AssetList, error) {
 	return i.db.ListAssets(ctx, params)
 }
 
-func (i *Index) GetAsset(ctx context.Context, idStrOrAlias string) (*Asset, error) {
+func (i *Index) GetAsset(ctx context.Context, idStrOrAlias string) (*index.Asset, error) {
 	params := &ListAssetsParams{}
 
 	id, err := ids.FromString(idStrOrAlias)
@@ -159,11 +162,11 @@ func (i *Index) GetAsset(ctx context.Context, idStrOrAlias string) (*Asset, erro
 	return nil, err
 }
 
-func (i *Index) ListAddresses(ctx context.Context, params *ListAddressesParams) (*AddressList, error) {
+func (i *Index) ListAddresses(ctx context.Context, params *ListAddressesParams) (*index.AddressList, error) {
 	return i.db.ListAddresses(ctx, params)
 }
 
-func (i *Index) GetAddress(ctx context.Context, id ids.ShortID) (*Address, error) {
+func (i *Index) GetAddress(ctx context.Context, id ids.ShortID) (*index.Address, error) {
 	addressList, err := i.db.ListAddresses(ctx, &ListAddressesParams{Address: &id})
 	if err != nil {
 		return nil, err
@@ -174,11 +177,11 @@ func (i *Index) GetAddress(ctx context.Context, id ids.ShortID) (*Address, error
 	return nil, err
 }
 
-func (i *Index) ListOutputs(ctx context.Context, params *ListOutputsParams) (*OutputList, error) {
+func (i *Index) ListOutputs(ctx context.Context, params *ListOutputsParams) (*index.OutputList, error) {
 	return i.db.ListOutputs(ctx, params)
 }
 
-func (i *Index) GetOutput(ctx context.Context, id ids.ID) (*Output, error) {
+func (i *Index) GetOutput(ctx context.Context, id ids.ID) (*index.Output, error) {
 	outputList, err := i.db.ListOutputs(ctx, &ListOutputsParams{ID: &id})
 	if err != nil {
 		return nil, err

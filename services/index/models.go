@@ -1,7 +1,7 @@
 // (c) 2020, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-package avm
+package index
 
 import (
 	"time"
@@ -10,8 +10,6 @@ import (
 )
 
 var (
-	VMName = "avm"
-
 	OutputTypesSECP2556K1Transfer OutputType = 0x000000ff
 
 	TXTypeBase        TransactionType = "base"

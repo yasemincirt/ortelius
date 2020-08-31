@@ -9,6 +9,7 @@ import (
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/hashing"
 
+	"github.com/ava-labs/ortelius/services/index"
 	"github.com/ava-labs/ortelius/services/models"
 )
 
@@ -23,9 +24,9 @@ type testVector struct {
 }
 
 type testVectorExpecteds struct {
-	txs      []Transaction
-	outs     []Output
-	outAddrs []OutputAddress
+	txs      []index.Transaction
+	outs     []index.Output
+	outAddrs []index.OutputAddress
 }
 
 func copyTestVectorExpecteds(e1 testVectorExpecteds) testVectorExpecteds {
@@ -36,20 +37,20 @@ func copyTestVectorExpecteds(e1 testVectorExpecteds) testVectorExpecteds {
 	}
 }
 
-func copyTxSlice(s1 []Transaction) []Transaction {
-	s2 := make([]Transaction, len(s1))
+func copyTxSlice(s1 []index.Transaction) []index.Transaction {
+	s2 := make([]index.Transaction, len(s1))
 	copy(s2, s1)
 	return s2
 }
 
-func copyOutputSlice(s1 []Output) []Output {
-	s2 := make([]Output, len(s1))
+func copyOutputSlice(s1 []index.Output) []index.Output {
+	s2 := make([]index.Output, len(s1))
 	copy(s2, s1)
 	return s2
 }
 
-func copyOutputAddrSlice(s1 []OutputAddress) []OutputAddress {
-	s2 := make([]OutputAddress, len(s1))
+func copyOutputAddrSlice(s1 []index.OutputAddress) []index.OutputAddress {
+	s2 := make([]index.OutputAddress, len(s1))
 	copy(s2, s1)
 	return s2
 }
@@ -67,18 +68,18 @@ func createTestVectors() (testVectors []testVector) {
 	addr3 := models.ToShortStringID(ids.NewShortID([20]byte{208, 187, 155, 197, 193, 255, 200, 81, 99, 172, 211, 188, 182, 225, 70, 109, 145, 253, 209, 84}))
 	addrChange := models.ToShortStringID(ids.NewShortID([20]byte{60, 183, 211, 132, 46, 140, 238, 106, 14, 189, 9, 241, 254, 136, 79, 104, 97, 225, 178, 156}))
 
-	avaxGenesisOutput := Output{
+	avaxGenesisOutput := index.Output{
 		ID:                     "ehWBfjaqMPbtsRfjf3ZPjREFVeAyfiGs2Q52ZUy2pzNNumBRd",
 		TransactionID:          "n8XH5JY1EX5VYqDeAhB4Zd4GKxi9UNQy6oPpMsCAj1Q6xkiiL",
 		OutputIndex:            0,
 		AssetID:                "n8XH5JY1EX5VYqDeAhB4Zd4GKxi9UNQy6oPpMsCAj1Q6xkiiL",
-		OutputType:             OutputTypesSECP2556K1Transfer,
+		OutputType:             index.OutputTypesSECP2556K1Transfer,
 		Amount:                 "45000000000000000",
 		CreatedAt:              time.Unix(1, 0),
 		RedeemingTransactionID: "PBp3ZQyjnLNfKPLP1FM48GreKBKxrY5PRAL2PLtPsj9v71kca",
 	}
 
-	avaxGenesisOutputAddress := OutputAddress{
+	avaxGenesisOutputAddress := index.OutputAddress{
 		OutputID: avaxGenesisOutput.ID,
 		Address:  "6Y3kysjF9jnHnYkdS9yGAuoHyae2eNmeV",
 	}
@@ -88,8 +89,8 @@ func createTestVectors() (testVectors []testVector) {
 	var i int64 = 0
 
 	expecteds := testVectorExpecteds{
-		outs:     []Output{avaxGenesisOutput},
-		outAddrs: []OutputAddress{avaxGenesisOutputAddress},
+		outs:     []index.Output{avaxGenesisOutput},
+		outAddrs: []index.OutputAddress{avaxGenesisOutputAddress},
 	}
 
 	addVector := func(e testVectorExpecteds) {
@@ -100,8 +101,8 @@ func createTestVectors() (testVectors []testVector) {
 		i++
 	}
 
-	nextTx := func() Transaction {
-		return Transaction{
+	nextTx := func() index.Transaction {
+		return index.Transaction{
 			ID:                     txID,
 			CanonicalSerialization: testVectorSerializedTxs[i],
 			CreatedAt:              time.Unix(i+1, 0),
@@ -117,15 +118,15 @@ func createTestVectors() (testVectors []testVector) {
 		return txID.Prefix(idx), nil
 	}
 
-	outsFor := func(amounts ...uint64) []Output {
-		outs := make([]Output, len(amounts))
+	outsFor := func(amounts ...uint64) []index.Output {
+		outs := make([]index.Output, len(amounts))
 		for i, amount := range amounts {
-			outs[i] = Output{
+			outs[i] = index.Output{
 				TransactionID: txID,
 				OutputIndex:   uint64(i),
-				Amount:        TokenAmountForUint64(amount),
+				Amount:        index.TokenAmountForUint64(amount),
 				AssetID:       models.ToStringID(testAVAAssetID),
-				OutputType:    OutputTypesSECP2556K1Transfer,
+				OutputType:    index.OutputTypesSECP2556K1Transfer,
 				Threshold:     1,
 			}
 
@@ -135,11 +136,11 @@ func createTestVectors() (testVectors []testVector) {
 		return outs
 	}
 
-	outAddrsFor := func(addr models.StringShortID) []OutputAddress {
+	outAddrsFor := func(addr models.StringShortID) []index.OutputAddress {
 		outID1, _ := calculateOutputID(txID, 0)
 		outID2, _ := calculateOutputID(txID, 1)
 
-		return []OutputAddress{{
+		return []index.OutputAddress{{
 			OutputID: models.ToStringID(outID1),
 			Address:  addr,
 		}, {
