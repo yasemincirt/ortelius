@@ -280,7 +280,7 @@ func (db *DB) ListTransactions(ctx context.Context, p *ListTransactionsParams) (
 	}
 
 	// Add all the addition information we might want
-	if err := db.dressTransactions(ctx, dbRunner, txs); err != nil {
+	if err := dressTransactions(ctx, dbRunner, txs); err != nil {
 		return nil, err
 	}
 
@@ -342,7 +342,7 @@ func (db *DB) ListAddresses(ctx context.Context, p *ListAddressesParams) (*index
 	}
 
 	// Add all the addition information we might want
-	if err = db.dressAddresses(ctx, dbRunner, addresses); err != nil {
+	if err = dressAddresses(ctx, dbRunner, addresses); err != nil {
 		return nil, err
 	}
 
@@ -428,7 +428,33 @@ func (db *DB) getFirstTransactionTime(ctx context.Context) (time.Time, error) {
 	return time.Unix(ts, 0).UTC(), nil
 }
 
-func (db *DB) dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*index.Transaction) error {
+func (db *DB) searchByID(ctx context.Context, id ids.ID) (*index.SearchResults, error) {
+	if assets, err := db.ListAssets(ctx, &ListAssetsParams{ID: &id}); err != nil {
+		return nil, err
+	} else if len(assets.Assets) > 0 {
+		return collateSearchResults(assets, nil, nil, nil)
+	}
+
+	if txs, err := db.ListTransactions(ctx, &ListTransactionsParams{ID: &id}); err != nil {
+		return nil, err
+	} else if len(txs.Transactions) > 0 {
+		return collateSearchResults(nil, nil, txs, nil)
+	}
+
+	return &index.SearchResults{}, nil
+}
+
+func (db *DB) searchByShortID(ctx context.Context, id ids.ShortID) (*index.SearchResults, error) {
+	if addrs, err := db.ListAddresses(ctx, &ListAddressesParams{Address: &id}); err != nil {
+		return nil, err
+	} else if len(addrs.Addresses) > 0 {
+		return collateSearchResults(nil, addrs, nil, nil)
+	}
+
+	return &index.SearchResults{}, nil
+}
+
+func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*index.Transaction) error {
 	if len(txs) == 0 {
 		return nil
 	}
@@ -579,7 +605,7 @@ func (db *DB) dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner,
 	return nil
 }
 
-func (db *DB) dressAddresses(ctx context.Context, dbRunner dbr.SessionRunner, addrs []*index.Address) error {
+func dressAddresses(ctx context.Context, dbRunner dbr.SessionRunner, addrs []*index.Address) error {
 	if len(addrs) == 0 {
 		return nil
 	}
@@ -629,32 +655,6 @@ func (db *DB) dressAddresses(ctx context.Context, dbRunner dbr.SessionRunner, ad
 	}
 
 	return nil
-}
-
-func (db *DB) searchByID(ctx context.Context, id ids.ID) (*index.SearchResults, error) {
-	if assets, err := db.ListAssets(ctx, &ListAssetsParams{ID: &id}); err != nil {
-		return nil, err
-	} else if len(assets.Assets) > 0 {
-		return collateSearchResults(assets, nil, nil, nil)
-	}
-
-	if txs, err := db.ListTransactions(ctx, &ListTransactionsParams{ID: &id}); err != nil {
-		return nil, err
-	} else if len(txs.Transactions) > 0 {
-		return collateSearchResults(nil, nil, txs, nil)
-	}
-
-	return &index.SearchResults{}, nil
-}
-
-func (db *DB) searchByShortID(ctx context.Context, id ids.ShortID) (*index.SearchResults, error) {
-	if addrs, err := db.ListAddresses(ctx, &ListAddressesParams{Address: &id}); err != nil {
-		return nil, err
-	} else if len(addrs.Addresses) > 0 {
-		return collateSearchResults(nil, addrs, nil, nil)
-	}
-
-	return &index.SearchResults{}, nil
 }
 
 func collateSearchResults(assetResults *index.AssetList, addressResults *index.AddressList, transactionResults *index.TransactionList, _ *index.OutputList) (*index.SearchResults, error) {

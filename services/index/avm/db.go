@@ -6,32 +6,34 @@ package avm
 import (
 	"context"
 
+	"github.com/ava-labs/gecko/utils/codec"
 	"github.com/ava-labs/gecko/utils/crypto"
-	"github.com/ava-labs/gecko/vms/avm"
-	"github.com/gocraft/dbr/v2"
-	"github.com/gocraft/health"
 
 	// Import MySQL driver
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gocraft/dbr/v2"
+	"github.com/gocraft/health"
 )
 
-// DB is a services.Accumulator backed by redis
 type DB struct {
-	chainID string
-	vm      *avm.VM
-	stream  *health.Stream
-	db      *dbr.Connection
+	networkID uint32
+	chainID   string
+
+	codec  codec.Codec
+	stream *health.Stream
+	db     *dbr.Connection
 
 	ecdsaRecoveryFactory crypto.FactorySECP256K1R
 }
 
 // NewDB creates a new DB for the given config
-func NewDB(stream *health.Stream, db *dbr.Connection, chainID string, vm *avm.VM) *DB {
+func NewDB(stream *health.Stream, db *dbr.Connection, networkID uint32, chainID string, codec codec.Codec) *DB {
 	return &DB{
-		db:      db,
-		vm:      vm,
-		stream:  stream,
-		chainID: chainID,
+		db:        db,
+		codec:     codec,
+		stream:    stream,
+		chainID:   chainID,
+		networkID: networkID,
 
 		ecdsaRecoveryFactory: crypto.FactorySECP256K1R{},
 	}

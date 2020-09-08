@@ -28,7 +28,7 @@ func IsDuplicateEntryError(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")
 }
 
-func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.BaseTx, creds []verify.Verifiable) error {
+func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.BaseTx, txType TransactionType, creds []verify.Verifiable) error {
 	var (
 		err   error
 		total uint64 = 0
@@ -97,7 +97,7 @@ func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.B
 		InsertInto("avm_transactions").
 		Pair("id", baseTx.ID().String()).
 		Pair("chain_id", baseTx.BlockchainID.String()).
-		// Pair("type", txType).
+		Pair("type", txType).
 		Pair("created_at", ctx.Time()).
 		Pair("canonical_serialization", unsignedBytes).
 		ExecContext(ctx.Ctx())
@@ -118,7 +118,7 @@ func IngestTxOutput(ctx services.ConsumerCtx, tx avax.BaseTx, idx uint32, assetI
 	// func IngestTxOutput(ctx services.ConsumerCtx, tx avax.BaseTx, idx uint32, out avax.TransferableOutput) error {
 	errs := wrappers.Errs{}
 
-	switch _ := out.(type) {
+	switch out.(type) {
 	case avax.TransferableOut:
 	}
 

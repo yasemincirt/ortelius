@@ -12,10 +12,17 @@ import (
 var (
 	OutputTypesSECP2556K1Transfer OutputType = 0x000000ff
 
-	TXTypeBase        TransactionType = "base"
-	TXTypeCreateAsset TransactionType = "create_asset"
-	TXTypeImport      TransactionType = "import"
-	TXTypeExport      TransactionType = "export"
+	TXTypeBase               TransactionType = "base"
+	TXTypeGenesisAsset       TransactionType = "genesis_asset"
+	TXTypeCreateAsset        TransactionType = "create_asset"
+	TXTypeImport             TransactionType = "import"
+	TXTypeExport             TransactionType = "export"
+	TXTypeOperation          TransactionType = "operation"
+	TXTypeCreateSubnet       TransactionType = "create_subnet"
+	TXTypeCreateChain        TransactionType = "create_chain"
+	TXTypeAddValidator       TransactionType = "add_validator"
+	TXTypeAddSubnetValidator TransactionType = "add_subnet_validator"
+	TXTypeAddDelegator       TransactionType = "add_delegator"
 
 	ResultTypeTransaction SearchResultType = "transaction"
 	ResultTypeAsset       SearchResultType = "asset"

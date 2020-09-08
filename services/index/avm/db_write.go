@@ -38,7 +38,7 @@ func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int6
 	}()
 
 	avmGenesis := &avm.Genesis{}
-	if err = db.vm.Codec().Unmarshal(genesisBytes, avmGenesis); err != nil {
+	if err = db.codec.Unmarshal(genesisBytes, avmGenesis); err != nil {
 		return err
 	}
 
@@ -52,11 +52,7 @@ func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int6
 
 	cCtx := services.NewConsumerContext(ctx, job, dbTx, timestamp)
 	for _, tx := range avmGenesis.Txs {
-		if err = index.IngestBaseTx(cCtx, tx.UnsignedBytes(), &tx.BaseTx.BaseTx, nil); err != nil {
-			return err
-		}
-
-		if err = db.ingestCreateAssetTx(cCtx, &tx.CreateAssetTx, tx.Alias); err != nil {
+		if err = db.ingestTx(cCtx, tx.Bytes()); err != nil {
 			return err
 		}
 	}
@@ -107,7 +103,7 @@ func (db *DB) Index(ctx context.Context, i services.Consumable) error {
 }
 
 func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
-	tx, err := parseTx(db.vm.Codec(), txBytes)
+	tx, err := parseTx(db.codec, txBytes)
 	if err != nil {
 		return err
 	}
@@ -115,22 +111,28 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 	var (
 		errs   = wrappers.Errs{}
 		baseTx *avm.BaseTx
+		txType = index.TXTypeBase
 	)
 
 	// Finish processing with a type-specific ingestion routine
 	switch castTx := tx.UnsignedTx.(type) {
 	case *avm.GenesisAsset:
+		txType = index.TXTypeGenesisAsset
 		baseTx = &castTx.BaseTx
 		errs.Add(db.ingestCreateAssetTx(ctx, &castTx.CreateAssetTx, castTx.Alias))
 	case *avm.CreateAssetTx:
+		txType = index.TXTypeCreateAsset
 		baseTx = &castTx.BaseTx
 		errs.Add(db.ingestCreateAssetTx(ctx, castTx, ""))
 	case *avm.OperationTx:
+		txType = index.TXTypeOperation
 		baseTx = &castTx.BaseTx
 	case *avm.ImportTx:
+		txType = index.TXTypeImport
 		baseTx = &castTx.BaseTx
 		castTx.BaseTx.Ins = append(castTx.BaseTx.Ins, castTx.Ins...)
 	case *avm.ExportTx:
+		txType = index.TXTypeExport
 		baseTx = &castTx.BaseTx
 		castTx.BaseTx.Outs = append(castTx.BaseTx.Outs, castTx.Outs...)
 	case *avm.BaseTx:
@@ -139,13 +141,13 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 		return errors.New("unknown tx type")
 	}
 
-	errs.Add(index.IngestBaseTx(ctx, tx.UnsignedBytes(), &baseTx.BaseTx, tx.Credentials()))
+	errs.Add(index.IngestBaseTx(ctx, tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Credentials()))
 
 	return errs.Err
 }
 
 func (db *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, tx *avm.CreateAssetTx, alias string) error {
-	wrappedTxBytes, err := db.vm.Codec().Marshal(&avm.Tx{UnsignedTx: tx})
+	wrappedTxBytes, err := db.codec.Marshal(&avm.Tx{UnsignedTx: tx})
 	if err != nil {
 		return err
 	}

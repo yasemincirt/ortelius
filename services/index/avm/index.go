@@ -13,6 +13,7 @@ import (
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/snow"
 	"github.com/ava-labs/gecko/snow/engine/common"
+	"github.com/ava-labs/gecko/utils/codec"
 	"github.com/ava-labs/gecko/utils/logging"
 	"github.com/ava-labs/gecko/vms/avm"
 	"github.com/ava-labs/gecko/vms/nftfx"
@@ -57,7 +58,7 @@ func newForConnections(conns *services.Connections, networkID uint32, chainID st
 		return nil, err
 	}
 
-	vm, err := newAVM(id, networkID)
+	codec, err := newAVMCodec(id, networkID)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +66,7 @@ func newForConnections(conns *services.Connections, networkID uint32, chainID st
 	return &Index{
 		networkID: networkID,
 		chainID:   chainID,
-		db:        NewDB(conns.Stream(), conns.DB(), chainID, vm),
+		db:        NewDB(conns.Stream(), conns.DB(), networkID, chainID, codec),
 	}, nil
 }
 
@@ -200,8 +201,8 @@ func (i *Index) Close(ctx context.Context) error {
 	return i.db.Close(ctx)
 }
 
-// newAVM creates an producer instance that we can use to parse txs
-func newAVM(chainID ids.ID, networkID uint32) (*avm.VM, error) {
+// newAVMCodec creates an producer instance that we can use to parse txs
+func newAVMCodec(chainID ids.ID, networkID uint32) (codec.Codec, error) {
 	g, err := genesis.VMGenesis(networkID, avm.ID)
 	if err != nil {
 		return nil, err
@@ -253,5 +254,5 @@ func newAVM(chainID ids.ID, networkID uint32) (*avm.VM, error) {
 		return nil, err
 	}
 
-	return vm, nil
+	return vm.Codec(), nil
 }

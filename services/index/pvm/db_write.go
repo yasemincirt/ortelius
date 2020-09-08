@@ -127,85 +127,51 @@ func (db *DB) indexTx(ctx services.ConsumerCtx, blockID ids.ID, tx platformvm.Tx
 	var (
 		errs   = wrappers.Errs{}
 		baseTx *platformvm.BaseTx
+		txType = index.TXTypeBase
 	)
 
 	switch typedTx := tx.UnsignedTx.(type) {
 	case *platformvm.UnsignedCreateSubnetTx:
+		txType = index.TXTypeCreateSubnet
 		baseTx = &typedTx.BaseTx
 		errs.Add(db.indexCreateSubnetTx(ctx, typedTx))
 	case *platformvm.UnsignedCreateChainTx:
+		txType = index.TXTypeCreateChain
 		baseTx = &typedTx.BaseTx
-		baseCredsLen := len(tx.Creds) - 1
-		errs.Add(db.indexCreateChainTx(ctx, typedTx, tx.Creds[baseCredsLen]))
-		tx.Creds = tx.Creds[:baseCredsLen]
+		baseTxCredsLen := len(tx.Creds) - 1
+		var subnetCred = verify.Verifiable(nil)
+		if baseTxCredsLen >= 0 {
+			subnetCred = tx.Creds[baseTxCredsLen]
+			tx.Creds = tx.Creds[:baseTxCredsLen]
+		}
+		errs.Add(db.indexCreateChainTx(ctx, typedTx, subnetCred))
+
 	case *platformvm.UnsignedImportTx:
+		txType = index.TXTypeImport
 		typedTx.BaseTx.Ins = append(typedTx.BaseTx.Ins, typedTx.ImportedInputs...)
 		baseTx = &typedTx.BaseTx
 	case *platformvm.UnsignedExportTx:
+		txType = index.TXTypeExport
 		typedTx.BaseTx.Outs = append(typedTx.BaseTx.Outs, typedTx.ExportedOutputs...)
 		baseTx = &typedTx.BaseTx
+
 	case *platformvm.UnsignedAddValidatorTx:
+		txType = index.TXTypeAddValidator
 		baseTx = &typedTx.BaseTx
-		errs.Add(db.indexValidator(ctx, typedTx))
+		// errs.Add(db.indexValidator(ctx, typedTx))
 	case *platformvm.UnsignedAddSubnetValidatorTx:
+		txType = index.TXTypeAddSubnetValidator
 		baseTx = &typedTx.BaseTx
+		// errs.Add(db.indexValidator(ctx, typedTx))
 	case *platformvm.UnsignedAddDelegatorTx:
+		txType = index.TXTypeAddDelegator
 		baseTx = &typedTx.BaseTx
+		// errs.Add(db.indexValidator(ctx, typedTx))
 	default:
-		return ctx.Job().EventErr("index_tx", ErrUnknownTXType)
+		return ctx.Job().EventErr("index_transaction", ErrUnknownTXType)
 	}
 
-	errs.Add(index.IngestBaseTx(ctx, tx.UnsignedBytes(), &baseTx.BaseTx, tx.Creds))
-
-	return errs.Err
-}
-
-func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, tx *platformvm.UnsignedCreateChainTx, cred verify.Verifiable) error {
-	errs := wrappers.Errs{}
-
-	_, err := ctx.DB().
-		InsertInto("pvm_chains").
-		Pair("id", tx.ID().String()).
-		Pair("network_id", tx.NetworkID).
-		Pair("subnet_id", tx.SubnetID.String()).
-		Pair("name", tx.ChainName).
-		Pair("vm_id", tx.VMID.String()).
-		Pair("genesis_data", tx.GenesisData).
-		ExecContext(ctx.Ctx())
-	if err != nil && !index.IsDuplicateEntryError(err) {
-		errs.Add(ctx.Job().EventErr("index_create_chain_tx.upsert_chain", err))
-	}
-
-	// Add feature extentions
-	if len(tx.FxIDs) > 0 {
-		builder := ctx.DB().
-			InsertInto("pvm_chains_fx_ids").
-			Columns("chain_id", "fx_id")
-		for _, fxID := range tx.FxIDs {
-			builder.Values(db.chainID, fxID.String())
-		}
-
-		if _, err = builder.ExecContext(ctx.Ctx()); err != nil && !index.IsDuplicateEntryError(err) {
-			errs.Add(ctx.Job().EventErr("index_create_chain_tx.upsert_chain_fx_ids", err))
-		}
-	}
-
-	// Add control signatures
-	switch auth := cred.(type) {
-	case *secp256k1fx.Credential:
-		if len(auth.Sigs) > 0 {
-			builder := ctx.DB().
-				InsertInto("pvm_chains_control_signatures").
-				Columns("chain_id", "signature")
-			for _, sig := range auth.Sigs {
-				builder.Values(db.chainID, sig[:])
-			}
-			_, err = builder.ExecContext(ctx.Ctx())
-			if err != nil && !index.IsDuplicateEntryError(err) {
-				errs.Add(ctx.Job().EventErr("index_create_chain_tx.upsert_chain_control_sigs", err))
-			}
-		}
-	}
+	errs.Add(index.IngestBaseTx(ctx, tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Creds))
 
 	return errs.Err
 }
@@ -243,6 +209,56 @@ func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, tx *platformvm.Unsig
 
 	if _, err := builder.ExecContext(ctx.Ctx()); err != nil && !index.IsDuplicateEntryError(err) {
 		errs.Add(ctx.Job().EventErr("index_create_subnet_tx.upsert_subnet", err))
+	}
+
+	return errs.Err
+}
+
+func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, tx *platformvm.UnsignedCreateChainTx, creds verify.Verifiable) error {
+	errs := wrappers.Errs{}
+
+	_, err := ctx.DB().
+		InsertInto("pvm_chains").
+		Pair("id", tx.ID().String()).
+		Pair("network_id", tx.NetworkID).
+		Pair("subnet_id", tx.SubnetID.String()).
+		Pair("name", tx.ChainName).
+		Pair("vm_id", tx.VMID.String()).
+		Pair("genesis_data", tx.GenesisData).
+		ExecContext(ctx.Ctx())
+	if err != nil && !index.IsDuplicateEntryError(err) {
+		errs.Add(ctx.Job().EventErr("index_create_chain_tx.upsert_chain", err))
+	}
+
+	// Add feature extentions
+	if len(tx.FxIDs) > 0 {
+		builder := ctx.DB().
+			InsertInto("pvm_chains_fx_ids").
+			Columns("chain_id", "fx_id")
+		for _, fxID := range tx.FxIDs {
+			builder.Values(db.chainID, fxID.String())
+		}
+
+		if _, err = builder.ExecContext(ctx.Ctx()); err != nil && !index.IsDuplicateEntryError(err) {
+			errs.Add(ctx.Job().EventErr("index_create_chain_tx.upsert_chain_fx_ids", err))
+		}
+	}
+
+	// Add control signatures
+	switch auth := creds.(type) {
+	case *secp256k1fx.Credential:
+		if len(auth.Sigs) > 0 {
+			builder := ctx.DB().
+				InsertInto("pvm_chains_control_signatures").
+				Columns("chain_id", "signature")
+			for _, sig := range auth.Sigs {
+				builder.Values(db.chainID, sig[:])
+			}
+			_, err = builder.ExecContext(ctx.Ctx())
+			if err != nil && !index.IsDuplicateEntryError(err) {
+				errs.Add(ctx.Job().EventErr("index_create_chain_tx.upsert_chain_control_sigs", err))
+			}
+		}
 	}
 
 	return errs.Err
