@@ -14,8 +14,8 @@ import (
 	"github.com/gocraft/health"
 	"github.com/gocraft/web"
 
+	"github.com/ava-labs/ortelius/cache"
 	"github.com/ava-labs/ortelius/cfg"
-	"github.com/ava-labs/ortelius/services/cache"
 )
 
 var (

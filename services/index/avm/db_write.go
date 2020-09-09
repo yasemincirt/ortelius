@@ -6,7 +6,6 @@ package avm
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/codec"
@@ -23,17 +22,20 @@ import (
 )
 
 func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int64) error {
-	return nil
 	var (
 		err  error
+		errs = wrappers.Errs{}
 		job  = db.stream.NewJob("bootstrap")
-		sess = db.db.NewSession(job)
 	)
 	job.KeyValue("chain_id", db.chainID)
 
 	defer func() {
 		if err != nil {
 			job.CompleteKv(health.Error, health.Kvs{"err": err.Error()})
+			return
+		}
+		if errs.Errored() {
+			job.CompleteKv(health.Error, health.Kvs{"err": errs.Err.Error()})
 			return
 		}
 		job.Complete(health.Success)
@@ -44,31 +46,24 @@ func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int6
 		return err
 	}
 
-	// Create db tx
+	// Create db tx, ingest all genesis assets, and commit
 	var dbTx *dbr.Tx
-	dbTx, err = sess.Begin()
-	if err != nil {
+	if dbTx, err = db.db.NewSession(job).Begin(); err != nil {
 		return err
 	}
 	defer dbTx.RollbackUnlessCommitted()
 
 	cCtx := services.NewConsumerContext(ctx, job, dbTx, timestamp)
 	for _, tx := range avmGenesis.Txs {
-		bytes, err := db.codec.Marshal(tx)
-		if err != nil {
-			return err
-		}
-
-		if err = db.ingestTx(cCtx, bytes); err != nil {
-			return err
-		}
+		errs.Add(db.ingestCreateAssetTx(cCtx, tx.ID(), &tx.CreateAssetTx, tx.Alias))
+		errs.Add(index.IngestBaseTx(cCtx, tx.ID(), tx.UnsignedBytes(), &tx.BaseTx.BaseTx, index.TXTypeGenesisAsset, nil))
 	}
 
-	if err = dbTx.Commit(); err != nil {
+	if err := dbTx.Commit(); err != nil {
 		return err
 	}
 
-	return nil
+	return errs.Err
 }
 
 // Index ingests a Transaction and adds it to the index
@@ -112,27 +107,20 @@ func (db *DB) Index(ctx context.Context, i services.Consumable) error {
 func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 	tx, err := parseTx(db.codec, txBytes)
 	if err != nil {
-		fmt.Println("txBytes:", txBytes)
-		panic(err)
 		return err
 	}
 
 	var (
+		txID   = ids.NewID(hashing.ComputeHash256Array(txBytes))
 		errs   = wrappers.Errs{}
 		baseTx *avm.BaseTx
 		txType = index.TXTypeBase
 	)
 
-	// Finish processing with a type-specific ingestion routine
+	// Handle type-specific processing
 	switch castTx := tx.UnsignedTx.(type) {
-	case *avm.GenesisAsset:
-		txType = index.TXTypeGenesisAsset
-		baseTx = &castTx.BaseTx
-		errs.Add(db.ingestCreateAssetTx(ctx, &castTx.CreateAssetTx, castTx.Alias))
-	case *avm.CreateAssetTx:
-		txType = index.TXTypeCreateAsset
-		baseTx = &castTx.BaseTx
-		errs.Add(db.ingestCreateAssetTx(ctx, castTx, ""))
+	case *avm.BaseTx:
+		baseTx = castTx
 	case *avm.OperationTx:
 		txType = index.TXTypeOperation
 		baseTx = &castTx.BaseTx
@@ -144,26 +132,25 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 		txType = index.TXTypeExport
 		baseTx = &castTx.BaseTx
 		castTx.BaseTx.Outs = append(castTx.BaseTx.Outs, castTx.Outs...)
-	case *avm.BaseTx:
-		baseTx = castTx
+	case *avm.CreateAssetTx:
+		txType = index.TXTypeCreateAsset
+		baseTx = &castTx.BaseTx
+		errs.Add(db.ingestCreateAssetTx(ctx, txID, castTx, ""))
 	default:
 		return errors.New("unknown tx type")
 	}
 
-	errs.Add(index.IngestBaseTx(ctx, tx.ID(), tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Credentials()))
+	errs.Add(index.IngestBaseTx(ctx, txID, tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Credentials()))
 
 	return errs.Err
 }
 
-func (db *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, tx *avm.CreateAssetTx, alias string) error {
-	wrappedTxBytes, err := db.codec.Marshal(&avm.Tx{UnsignedTx: tx})
-	if err != nil {
-		return err
-	}
-	txID := ids.NewID(hashing.ComputeHash256Array(wrappedTxBytes))
-
-	var outputCount uint32
-	var amount uint64
+func (db *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, txID ids.ID, tx *avm.CreateAssetTx, alias string) error {
+	var (
+		err         error
+		outputCount uint32
+		amount      uint64
+	)
 	for _, state := range tx.States {
 		for _, out := range state.Outs {
 			outputCount++
@@ -207,8 +194,6 @@ func parseTx(c codec.Codec, bytes []byte) (*avm.Tx, error) {
 	tx := &avm.Tx{}
 	err := c.Unmarshal(bytes, tx)
 	if err != nil {
-		fmt.Println("bytes:", bytes)
-		panic(err)
 		return nil, err
 	}
 	unsignedBytes, err := c.Marshal(&tx.UnsignedTx)
@@ -218,13 +203,4 @@ func parseTx(c codec.Codec, bytes []byte) (*avm.Tx, error) {
 
 	tx.Initialize(unsignedBytes, bytes)
 	return tx, nil
-
-	// utx := &avm.UniqueTx{
-	// 	TxState: &avm.TxState{
-	// 		Tx: tx,
-	// 	},
-	// 	txID: tx.ID(),
-	// }
-	//
-	// return utx, nil
 }

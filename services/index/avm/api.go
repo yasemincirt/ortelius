@@ -13,8 +13,16 @@ import (
 	"github.com/gocraft/web"
 
 	"github.com/ava-labs/ortelius/api"
+	"github.com/ava-labs/ortelius/cfg"
+	"github.com/ava-labs/ortelius/services/models"
 	"github.com/ava-labs/ortelius/services/params"
 )
+
+const VMName = "avm"
+
+func init() {
+	api.RegisterRouter(VMName, NewAPIRouter, APIContext{})
+}
 
 type APIContext struct {
 	*api.RootRequestContext
@@ -37,7 +45,7 @@ func NewAPIRouter(params api.RouterParams) error {
 		return err
 	}
 
-	overviewHandler, err := newOverviewHandler(index, params.ChainConfig.Alias, avaxAssetID.String())
+	overviewHandler, err := newOverviewHandler(params.NetworkID, params.ChainConfig, avaxAssetID.String())
 	if err != nil {
 		return err
 	}
@@ -77,13 +85,14 @@ func NewAPIRouter(params api.RouterParams) error {
 // General routes
 //
 
-func newOverviewHandler(i *Index, alias string, avaxAssetID string) (func(c *APIContext, w web.ResponseWriter, _ *web.Request), error) {
-	overview, err := i.GetChainInfo(alias, avaxAssetID)
-	if err != nil {
-		return nil, err
-	}
-
-	overviewBytes, err := json.Marshal(overview)
+func newOverviewHandler(networkID uint32, chainCfg cfg.Chain, avaxAssetID string) (func(c *APIContext, w web.ResponseWriter, _ *web.Request), error) {
+	overviewBytes, err := json.Marshal(&models.ChainInfo{
+		VM:          VMName,
+		NetworkID:   networkID,
+		Alias:       chainCfg.Alias,
+		ID:          models.StringID(chainCfg.ID),
+		AVAXAssetID: models.StringID(avaxAssetID),
+	})
 	if err != nil {
 		return nil, err
 	}

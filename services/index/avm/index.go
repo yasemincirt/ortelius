@@ -6,7 +6,7 @@ package avm
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
 	"github.com/ava-labs/gecko/database"
 	"github.com/ava-labs/gecko/database/nodb"
@@ -19,25 +19,18 @@ import (
 	"github.com/ava-labs/gecko/vms/avm"
 	"github.com/ava-labs/gecko/vms/nftfx"
 	"github.com/ava-labs/gecko/vms/platformvm"
+	"github.com/ava-labs/gecko/vms/propertyfx"
 	"github.com/ava-labs/gecko/vms/secp256k1fx"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/ava-labs/ortelius/api"
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
 	"github.com/ava-labs/ortelius/services/index"
-	"github.com/ava-labs/ortelius/services/models"
 )
 
 var (
-	VMName = "avm"
-
 	ErrIncorrectGenesisChainTxType = errors.New("incorrect genesis chain tx type")
 )
-
-func init() {
-	api.RegisterRouter(VMName, NewAPIRouter, APIContext{})
-}
 
 type Index struct {
 	networkID uint32
@@ -74,26 +67,21 @@ func newForConnections(conns *services.Connections, networkID uint32, chainID st
 func (i *Index) Name() string { return "avm-index" }
 
 func (i *Index) Bootstrap(ctx context.Context) error {
-	platformGenesisBytes, _, err := genesis.Genesis(i.networkID)
+	genesisBytes, _, err := genesis.Genesis(i.networkID)
 	if err != nil {
 		return err
 	}
-
-	platformGenesis := &platformvm.Genesis{}
-	if err = platformvm.Codec.Unmarshal(platformGenesisBytes, platformGenesis); err != nil {
+	genesis := platformvm.Genesis{}
+	if err := platformvm.Codec.Unmarshal(genesisBytes, &genesis); err != nil {
+		return fmt.Errorf("couldn't unmarshal genesis bytes due to: %w", err)
+	}
+	if err := genesis.Initialize(); err != nil {
 		return err
 	}
-	if err = platformGenesis.Initialize(); err != nil {
-		return err
-	}
-
-	for _, chain := range platformGenesis.Chains {
-		createChainTx, ok := chain.UnsignedTx.(*platformvm.UnsignedCreateChainTx)
-		if !ok {
-			return ErrIncorrectGenesisChainTxType
-		}
-		if createChainTx.VMID.Equals(avm.ID) {
-			return i.bootstrap(ctx, createChainTx.GenesisData, int64(platformGenesis.Timestamp))
+	for _, chain := range genesis.Chains {
+		uChain := chain.UnsignedTx.(*platformvm.UnsignedCreateChainTx)
+		if uChain.VMID.Equals(avm.ID) {
+			return i.db.bootstrap(ctx, uChain.GenesisData, int64(genesis.Timestamp))
 		}
 	}
 	return nil
@@ -105,16 +93,6 @@ func (i *Index) Consume(ctx context.Context, ingestable services.Consumable) err
 	}
 
 	return nil
-}
-
-func (i *Index) GetChainInfo(alias string, avaxAssetID string) (*models.ChainInfo, error) {
-	return &models.ChainInfo{
-		Alias:       alias,
-		VM:          VMName,
-		NetworkID:   i.networkID,
-		ID:          models.StringID(i.chainID),
-		AVAXAssetID: models.StringID(avaxAssetID),
-	}, nil
 }
 
 func (i *Index) Search(ctx context.Context, params *SearchParams) (*index.SearchResults, error) {
@@ -194,17 +172,12 @@ func (i *Index) GetOutput(ctx context.Context, id ids.ID) (*index.Output, error)
 	return nil, err
 }
 
-func (i *Index) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int64) error {
-	return i.db.bootstrap(ctx, genesisBytes, timestamp)
-}
-
 func (i *Index) Close(ctx context.Context) error {
 	return i.db.Close(ctx)
 }
 
 // newAVMCodec creates an producer instance that we can use to parse txs
 func newAVMCodec(chainID ids.ID, networkID uint32) (codec.Codec, error) {
-	time.Sleep(1 * time.Second)
 	g, err := genesis.VMGenesis(networkID, avm.ID)
 	if err != nil {
 		return nil, err
@@ -242,8 +215,13 @@ func newAVMCodec(chainID ids.ID, networkID uint32) (codec.Codec, error) {
 				Fx: &nftfx.Fx{},
 				ID: fxID,
 			})
+		case fxID.Equals(propertyfx.ID):
+			fxs = append(fxs, &common.Fx{
+				Fx: &propertyfx.Fx{},
+				ID: fxID,
+			})
 		default:
-			// return nil, fmt.Errorf("Unknown FxID: %s", fxID)
+			return nil, fmt.Errorf("Unknown FxID: %s", fxID)
 		}
 	}
 

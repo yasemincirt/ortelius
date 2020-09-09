@@ -12,8 +12,8 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/health"
 
+	"github.com/ava-labs/ortelius/cache"
 	"github.com/ava-labs/ortelius/cfg"
-	"github.com/ava-labs/ortelius/services/cache"
 	"github.com/ava-labs/ortelius/services/db"
 )
 

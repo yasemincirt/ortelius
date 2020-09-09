@@ -4,6 +4,7 @@
 package index
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/ava-labs/gecko/vms/components/verify"
 	"github.com/ava-labs/gecko/vms/secp256k1fx"
 	"github.com/gocraft/dbr"
+	"github.com/gocraft/health"
 
 	"github.com/ava-labs/ortelius/services"
 )
@@ -25,6 +27,32 @@ const (
 	// serialized tx can be stored as in the database.
 	MaxSerializationLen = 64000
 )
+
+type DB struct {
+	stream *health.Stream
+	conn   *dbr.Connection
+}
+
+// NewDB creates a new DB for the given config
+func NewDB(stream *health.Stream, db *dbr.Connection) *DB {
+	return &DB{
+		stream: stream,
+		conn:   db,
+	}
+}
+
+func (db *DB) Close(context.Context) error {
+	db.stream.Event("close")
+	return db.conn.Close()
+}
+
+func (db *DB) NewSession(name string) dbr.SessionRunner {
+	return db.NewSessionForEventReceiver(db.stream.NewJob(name))
+}
+
+func (db *DB) NewSessionForEventReceiver(er health.EventReceiver) *dbr.Session {
+	return db.conn.NewSession(er)
+}
 
 func IsDuplicateEntryError(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")

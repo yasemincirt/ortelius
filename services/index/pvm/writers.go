@@ -11,12 +11,15 @@ import (
 
 	"github.com/ava-labs/gecko/genesis"
 	"github.com/ava-labs/gecko/ids"
+	"github.com/ava-labs/gecko/utils/codec"
 	"github.com/ava-labs/gecko/utils/hashing"
 	"github.com/ava-labs/gecko/utils/wrappers"
 	"github.com/ava-labs/gecko/vms/components/verify"
 	"github.com/ava-labs/gecko/vms/platformvm"
 	"github.com/ava-labs/gecko/vms/secp256k1fx"
+	"github.com/gocraft/health"
 
+	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
 	"github.com/ava-labs/ortelius/services/index"
 )
@@ -26,9 +29,41 @@ var (
 	ErrUnknownTXType    = errors.New("unknown transaction type")
 )
 
-func (db *DB) Index(ctx context.Context, c services.Consumable) error {
-	job := db.stream.NewJob("index")
-	sess := db.db.NewSession(job)
+type Writers struct {
+	networkID uint32
+	chainID   string
+
+	db     *index.DB
+	stream *health.Stream
+	codec  codec.Codec
+}
+
+func NewWriters(conf cfg.Services, networkID uint32, chainID string) (*Writers, error) {
+	conns, err := services.NewConnectionsFromConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Writers{
+		networkID: networkID,
+		chainID:   chainID,
+		db:        index.NewDB(conns.Stream(), conns.DB()),
+		stream:    conns.Stream(),
+		codec:     platformvm.Codec,
+	}, nil
+}
+
+func (w *Writers) Name() string                    { return "pvm-index" }
+func (w *Writers) Close(ctx context.Context) error { return w.db.Close(ctx) }
+
+// Consume implements the Consumer interface
+func (w *Writers) Consume(ctx context.Context, c services.Consumable) error {
+	return w.Index(ctx, c)
+}
+
+func (w *Writers) Index(ctx context.Context, c services.Consumable) error {
+	job := w.stream.NewJob("index")
+	sess := w.db.NewSessionForEventReceiver(job)
 
 	// Create db tx
 	dbTx, err := sess.Begin()
@@ -38,21 +73,21 @@ func (db *DB) Index(ctx context.Context, c services.Consumable) error {
 	defer dbTx.RollbackUnlessCommitted()
 
 	// Consume the tx and commit
-	err = db.indexBlock(services.NewConsumerContext(ctx, job, dbTx, c.Timestamp()), c.Body())
+	err = w.indexBlock(services.NewConsumerContext(ctx, job, dbTx, c.Timestamp()), c.Body())
 	if err != nil {
 		return err
 	}
 	return dbTx.Commit()
 }
 
-func (db *DB) Bootstrap(ctx context.Context) error {
-	pvmGenesisBytes, _, err := genesis.Genesis(db.networkID)
+func (w *Writers) Bootstrap(ctx context.Context) error {
+	pvmGenesisBytes, _, err := genesis.Genesis(w.networkID)
 	if err != nil {
 		return err
 	}
 
 	pvmGenesis := &platformvm.Genesis{}
-	if err := db.codec.Unmarshal(pvmGenesisBytes, pvmGenesis); err != nil {
+	if err := w.codec.Unmarshal(pvmGenesisBytes, pvmGenesis); err != nil {
 		panic(err)
 		return err
 	}
@@ -61,8 +96,8 @@ func (db *DB) Bootstrap(ctx context.Context) error {
 		return err
 	}
 
-	job := db.stream.NewJob("bootstrap")
-	sess := db.db.NewSession(job)
+	job := w.stream.NewJob("bootstrap")
+	sess := w.db.NewSessionForEventReceiver(job)
 	dbTx, err := sess.Begin()
 	if err != nil {
 		return err
@@ -70,10 +105,9 @@ func (db *DB) Bootstrap(ctx context.Context) error {
 	defer dbTx.RollbackUnlessCommitted()
 
 	cCtx := services.NewConsumerContext(ctx, job, dbTx, int64(pvmGenesis.Timestamp))
-	blockID := ids.NewID([32]byte{})
 
 	for _, tx := range append(pvmGenesis.Chains, pvmGenesis.Validators...) {
-		if err = db.indexTx(cCtx, blockID, *tx); err != nil {
+		if err = w.indexTx(cCtx, *tx); err != nil {
 			return err
 		}
 	}
@@ -81,45 +115,36 @@ func (db *DB) Bootstrap(ctx context.Context) error {
 	return dbTx.Commit()
 }
 
-func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
+func (w *Writers) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	var block platformvm.Block
-	if err := db.codec.Unmarshal(blockBytes, &block); err != nil {
-		fmt.Println(blockBytes)
-		panic(err)
+	if err := w.codec.Unmarshal(blockBytes, &block); err != nil {
 		return ctx.Job().EventErr("index_block.unmarshal_block", err)
 	}
 
-	fmt.Println("blockBytes:")
-	fmt.Println("block.Bytes():", block.Bytes())
-
 	blkID := ids.NewID(hashing.ComputeHash256Array(blockBytes))
-
-	// if len(block.Bytes()) == 0 {
-	// 	panic("asdf")
-	// }
 
 	var (
 		errs        = wrappers.Errs{}
 		commonBlock platformvm.CommonBlock
-		blockType   BlockType
+		blockType   index.BlockType
 	)
 	switch blk := block.(type) {
 	case *platformvm.StandardBlock:
 		// blk.Initialize(&platformvm.VM{}, blockBytes)
-		commonBlock, blockType = blk.CommonBlock, BlockTypeStandard
+		commonBlock, blockType = blk.CommonBlock, index.BlockTypeStandard
 		for _, tx := range blk.Txs {
-			errs.Add(db.indexTx(ctx, tx.ID(), *tx))
+			errs.Add(w.indexTx(ctx, *tx))
 		}
 	case *platformvm.ProposalBlock:
-		commonBlock, blockType = blk.CommonBlock, BlockTypeProposal
-		errs.Add(db.indexTx(ctx, blk.Tx.ID(), blk.Tx))
+		commonBlock, blockType = blk.CommonBlock, index.BlockTypeProposal
+		errs.Add(w.indexTx(ctx, blk.Tx))
 	case *platformvm.AtomicBlock:
-		commonBlock, blockType = blk.CommonBlock, BlockTypeAtomic
-		errs.Add(db.indexTx(ctx, blk.Tx.ID(), blk.Tx))
+		commonBlock, blockType = blk.CommonBlock, index.BlockTypeAtomic
+		errs.Add(w.indexTx(ctx, blk.Tx))
 	case *platformvm.Abort:
-		commonBlock, blockType = blk.CommonBlock, BlockTypeAbort
+		commonBlock, blockType = blk.CommonBlock, index.BlockTypeAbort
 	case *platformvm.Commit:
-		commonBlock, blockType = blk.CommonBlock, BlockTypeCommit
+		commonBlock, blockType = blk.CommonBlock, index.BlockTypeCommit
 	default:
 		return ctx.Job().EventErr("index_block", ErrUnknownBlockType)
 	}
@@ -129,7 +154,7 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 		Pair("id", blkID.String()).
 		Pair("type", blockType).
 		Pair("parent_id", commonBlock.ParentID().String()).
-		Pair("chain_id", db.chainID).
+		Pair("chain_id", w.chainID).
 		Pair("serialization", blockBytes).
 		Pair("created_at", ctx.Time()).
 		ExecContext(ctx.Ctx())
@@ -139,21 +164,19 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	return errs.Err
 }
 
-func (db *DB) indexTx(ctx services.ConsumerCtx, _ ids.ID, tx platformvm.Tx) error {
+func (w *Writers) indexTx(ctx services.ConsumerCtx, tx platformvm.Tx) error {
 	var (
 		errs   = wrappers.Errs{}
 		baseTx *platformvm.BaseTx
 		txType = index.TXTypeBase
 	)
 
-	txBytes, err := db.codec.Marshal(tx)
+	txBytes, err := w.codec.Marshal(tx)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	fmt.Println("txBytes:", txBytes)
 
 	txID := ids.NewID(hashing.ComputeHash256Array(txBytes))
-	fmt.Println("tx id:", txID.String())
 
 	switch typedTx := tx.UnsignedTx.(type) {
 	case *platformvm.UnsignedAdvanceTimeTx:
@@ -161,7 +184,7 @@ func (db *DB) indexTx(ctx services.ConsumerCtx, _ ids.ID, tx platformvm.Tx) erro
 	case *platformvm.UnsignedCreateSubnetTx:
 		txType = index.TXTypeCreateSubnet
 		baseTx = &typedTx.BaseTx
-		errs.Add(db.indexCreateSubnetTx(ctx, typedTx))
+		errs.Add(w.indexCreateSubnetTx(ctx, txID, typedTx))
 	case *platformvm.UnsignedCreateChainTx:
 		txType = index.TXTypeCreateChain
 		baseTx = &typedTx.BaseTx
@@ -171,7 +194,7 @@ func (db *DB) indexTx(ctx services.ConsumerCtx, _ ids.ID, tx platformvm.Tx) erro
 			subnetCred = tx.Creds[baseTxCredsLen]
 			tx.Creds = tx.Creds[:baseTxCredsLen]
 		}
-		errs.Add(db.indexCreateChainTx(ctx, typedTx, subnetCred))
+		errs.Add(w.indexCreateChainTx(ctx, txID, typedTx, subnetCred))
 
 	case *platformvm.UnsignedImportTx:
 		txType = index.TXTypeImport
@@ -185,15 +208,15 @@ func (db *DB) indexTx(ctx services.ConsumerCtx, _ ids.ID, tx platformvm.Tx) erro
 	case *platformvm.UnsignedAddValidatorTx:
 		txType = index.TXTypeAddValidator
 		baseTx = &typedTx.BaseTx
-		// errs.Add(db.indexValidator(ctx, typedTx))
+		// errs.Add(w.indexValidator(ctx, txID, typedTx))
 	case *platformvm.UnsignedAddSubnetValidatorTx:
 		txType = index.TXTypeAddSubnetValidator
 		baseTx = &typedTx.BaseTx
-		// errs.Add(db.indexValidator(ctx, typedTx))
+		// errs.Add(w.indexValidator(ctx, txID, typedTx))
 	case *platformvm.UnsignedAddDelegatorTx:
 		txType = index.TXTypeAddDelegator
 		baseTx = &typedTx.BaseTx
-		// errs.Add(db.indexValidator(ctx, typedTx))
+		// errs.Add(w.indexValidator(ctx, txID, typedTx))
 	default:
 		fmt.Println("$$$$$$$$$$$")
 		fmt.Println(reflect.TypeOf(tx.UnsignedTx))
@@ -205,15 +228,15 @@ func (db *DB) indexTx(ctx services.ConsumerCtx, _ ids.ID, tx platformvm.Tx) erro
 	return errs.Err
 }
 
-func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, tx *platformvm.UnsignedCreateSubnetTx) error {
+func (w *Writers) indexCreateSubnetTx(ctx services.ConsumerCtx, txID ids.ID, tx *platformvm.UnsignedCreateSubnetTx) error {
 	errs := wrappers.Errs{}
 
 	// Add subnet
 	builder := ctx.DB().
 		InsertInto("pvm_subnets").
-		Pair("id", tx.ID().String()).
+		Pair("id", txID.String()).
 		Pair("network_id", tx.NetworkID).
-		Pair("chain_id", db.chainID).
+		Pair("chain_id", w.chainID).
 		Pair("created_at", ctx.Time())
 
 	// Add owner
@@ -243,12 +266,12 @@ func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, tx *platformvm.Unsig
 	return errs.Err
 }
 
-func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, tx *platformvm.UnsignedCreateChainTx, creds verify.Verifiable) error {
+func (w *Writers) indexCreateChainTx(ctx services.ConsumerCtx, txID ids.ID, tx *platformvm.UnsignedCreateChainTx, creds verify.Verifiable) error {
 	errs := wrappers.Errs{}
 
 	_, err := ctx.DB().
 		InsertInto("pvm_chains").
-		Pair("id", tx.ID().String()).
+		Pair("id", txID.String()).
 		Pair("network_id", tx.NetworkID).
 		Pair("subnet_id", tx.SubnetID.String()).
 		Pair("name", tx.ChainName).
@@ -265,7 +288,7 @@ func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, tx *platformvm.Unsign
 			InsertInto("pvm_chains_fx_ids").
 			Columns("chain_id", "fx_id")
 		for _, fxID := range tx.FxIDs {
-			builder.Values(db.chainID, fxID.String())
+			builder.Values(w.chainID, fxID.String())
 		}
 
 		if _, err = builder.ExecContext(ctx.Ctx()); err != nil && !index.IsDuplicateEntryError(err) {
@@ -281,7 +304,7 @@ func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, tx *platformvm.Unsign
 				InsertInto("pvm_chains_control_signatures").
 				Columns("chain_id", "signature")
 			for _, sig := range auth.Sigs {
-				builder.Values(db.chainID, sig[:])
+				builder.Values(w.chainID, sig[:])
 			}
 			_, err = builder.ExecContext(ctx.Ctx())
 			if err != nil && !index.IsDuplicateEntryError(err) {
@@ -293,7 +316,7 @@ func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, tx *platformvm.Unsign
 	return errs.Err
 }
 
-func (db *DB) indexValidator(ctx services.ConsumerCtx, txID ids.ID, dv platformvm.Validator, destination ids.ShortID, shares uint32, subnetID ids.ID) error {
+func (w *Writers) indexValidator(ctx services.ConsumerCtx, txID ids.ID, dv platformvm.Validator, destination ids.ShortID, shares uint32, subnetID ids.ID) error {
 	// 	_, err := ctx.DB().
 	// 		InsertInto("pvm_validators").
 	// 		Pair("transaction_id", txID.String()).
