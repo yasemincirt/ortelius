@@ -7,7 +7,6 @@ import (
 	"context"
 
 	"github.com/ava-labs/gecko/ids"
-	"github.com/ava-labs/gecko/vms/platformvm"
 
 	"github.com/ava-labs/ortelius/api"
 	"github.com/ava-labs/ortelius/cfg"
@@ -34,8 +33,12 @@ func New(conf cfg.Services, networkID uint32, chainID string) (*Index, error) {
 }
 
 func newForConnections(conns *services.Connections, networkID uint32, chainID string) *Index {
-	db := NewDBIndex(conns.Stream(), conns.DB(), networkID, chainID, platformvm.Codec)
-	return &Index{networkID, chainID, db}
+
+	return &Index{
+		networkID: networkID,
+		chainID:   chainID,
+		db:        NewDBIndex(conns.Stream(), conns.DB(), networkID, chainID),
+	}
 }
 
 func (i *Index) Name() string { return "pvm-index" }

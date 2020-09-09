@@ -6,9 +6,12 @@ package pvm
 import (
 	"context"
 	"errors"
+	"fmt"
+	"reflect"
 
 	"github.com/ava-labs/gecko/genesis"
 	"github.com/ava-labs/gecko/ids"
+	"github.com/ava-labs/gecko/utils/hashing"
 	"github.com/ava-labs/gecko/utils/wrappers"
 	"github.com/ava-labs/gecko/vms/components/verify"
 	"github.com/ava-labs/gecko/vms/platformvm"
@@ -49,7 +52,8 @@ func (db *DB) Bootstrap(ctx context.Context) error {
 	}
 
 	pvmGenesis := &platformvm.Genesis{}
-	if err := platformvm.Codec.Unmarshal(pvmGenesisBytes, pvmGenesis); err != nil {
+	if err := db.codec.Unmarshal(pvmGenesisBytes, pvmGenesis); err != nil {
+		panic(err)
 		return err
 	}
 
@@ -79,9 +83,20 @@ func (db *DB) Bootstrap(ctx context.Context) error {
 
 func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	var block platformvm.Block
-	if err := platformvm.Codec.Unmarshal(blockBytes, &block); err != nil {
+	if err := db.codec.Unmarshal(blockBytes, &block); err != nil {
+		fmt.Println(blockBytes)
+		panic(err)
 		return ctx.Job().EventErr("index_block.unmarshal_block", err)
 	}
+
+	fmt.Println("blockBytes:")
+	fmt.Println("block.Bytes():", block.Bytes())
+
+	blkID := ids.NewID(hashing.ComputeHash256Array(blockBytes))
+
+	// if len(block.Bytes()) == 0 {
+	// 	panic("asdf")
+	// }
 
 	var (
 		errs        = wrappers.Errs{}
@@ -90,6 +105,7 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	)
 	switch blk := block.(type) {
 	case *platformvm.StandardBlock:
+		// blk.Initialize(&platformvm.VM{}, blockBytes)
 		commonBlock, blockType = blk.CommonBlock, BlockTypeStandard
 		for _, tx := range blk.Txs {
 			errs.Add(db.indexTx(ctx, tx.ID(), *tx))
@@ -110,7 +126,7 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 
 	_, err := ctx.DB().
 		InsertInto("pvm_blocks").
-		Pair("id", block.ID().String()).
+		Pair("id", blkID.String()).
 		Pair("type", blockType).
 		Pair("parent_id", commonBlock.ParentID().String()).
 		Pair("chain_id", db.chainID).
@@ -123,14 +139,25 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	return errs.Err
 }
 
-func (db *DB) indexTx(ctx services.ConsumerCtx, blockID ids.ID, tx platformvm.Tx) error {
+func (db *DB) indexTx(ctx services.ConsumerCtx, _ ids.ID, tx platformvm.Tx) error {
 	var (
 		errs   = wrappers.Errs{}
 		baseTx *platformvm.BaseTx
 		txType = index.TXTypeBase
 	)
 
+	txBytes, err := db.codec.Marshal(tx)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("txBytes:", txBytes)
+
+	txID := ids.NewID(hashing.ComputeHash256Array(txBytes))
+	fmt.Println("tx id:", txID.String())
+
 	switch typedTx := tx.UnsignedTx.(type) {
+	case *platformvm.UnsignedAdvanceTimeTx:
+		return nil
 	case *platformvm.UnsignedCreateSubnetTx:
 		txType = index.TXTypeCreateSubnet
 		baseTx = &typedTx.BaseTx
@@ -168,10 +195,12 @@ func (db *DB) indexTx(ctx services.ConsumerCtx, blockID ids.ID, tx platformvm.Tx
 		baseTx = &typedTx.BaseTx
 		// errs.Add(db.indexValidator(ctx, typedTx))
 	default:
+		fmt.Println("$$$$$$$$$$$")
+		fmt.Println(reflect.TypeOf(tx.UnsignedTx))
 		return ctx.Job().EventErr("index_transaction", ErrUnknownTXType)
 	}
 
-	errs.Add(index.IngestBaseTx(ctx, tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Creds))
+	errs.Add(index.IngestBaseTx(ctx, txID, tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Creds))
 
 	return errs.Err
 }

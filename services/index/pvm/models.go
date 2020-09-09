@@ -19,23 +19,7 @@ const (
 	BlockTypeAtomic
 )
 
-const (
-	// Timed
-	TransactionTypeAddDefaultSubnetValidator TransactionType = (iota * 2) + 11
-	TransactionTypeAddNonDefaultSubnetValidator
-	TransactionTypeAddDefaultSubnetDelegator
-
-	// Decision
-	TransactionTypeCreateChain
-	TransactionTypeCreateSubnet
-
-	// Atomic
-	TransactionTypeImport
-	TransactionTypeExport
-)
-
 type BlockType uint8
-type TransactionType uint8
 
 type Block struct {
 	ID        models.StringID `json:"id"`

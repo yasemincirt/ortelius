@@ -2,8 +2,6 @@ module github.com/ava-labs/ortelius
 
 go 1.13
 
-replace github.com/ava-labs/gecko => /Users/tyler/dev/go/src/github.com/ava-labs/gecko
-
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.1 // indirect
 	github.com/DATA-DOG/go-txdb v0.1.3

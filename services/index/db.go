@@ -4,10 +4,12 @@
 package index
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/crypto"
+	"github.com/ava-labs/gecko/utils/hashing"
 	"github.com/ava-labs/gecko/utils/math"
 	"github.com/ava-labs/gecko/utils/wrappers"
 	"github.com/ava-labs/gecko/vms/components/avax"
@@ -28,7 +30,7 @@ func IsDuplicateEntryError(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")
 }
 
-func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.BaseTx, txType TransactionType, creds []verify.Verifiable) error {
+func IngestBaseTx(ctx services.ConsumerCtx, txID ids.ID, unsignedBytes []byte, baseTx *avax.BaseTx, txType TransactionType, creds []verify.Verifiable) error {
 	var (
 		err   error
 		total uint64 = 0
@@ -79,7 +81,7 @@ func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.B
 		_, err = ctx.DB().
 			Update("avm_outputs").
 			Set("redeemed_at", dbr.Now).
-			Set("redeeming_transaction_id", baseTx.ID().String()).
+			Set("redeeming_transaction_id", txID.String()).
 			Where("id IN ?", redeemedOutputs).
 			ExecContext(ctx.Ctx())
 		if err != nil {
@@ -95,7 +97,7 @@ func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.B
 	// Add baseTx to the table
 	_, err = ctx.DB().
 		InsertInto("avm_transactions").
-		Pair("id", baseTx.ID().String()).
+		Pair("id", txID.String()).
 		Pair("chain_id", baseTx.BlockchainID.String()).
 		Pair("type", txType).
 		Pair("created_at", ctx.Time()).
@@ -107,14 +109,14 @@ func IngestBaseTx(ctx services.ConsumerCtx, unsignedBytes []byte, baseTx *avax.B
 
 	// Process baseTx outputs by adding to the outputs table
 	for idx, out := range baseTx.Outs {
-		if err = IngestTxOutput(ctx, *baseTx, uint32(idx), out.AssetID(), out.Output()); err != nil {
+		if err = IngestTxOutput(ctx, txID, *baseTx, uint32(idx), out.AssetID(), out.Output()); err != nil {
 			// TODO: log error
 		}
 	}
 	return nil
 }
 
-func IngestTxOutput(ctx services.ConsumerCtx, tx avax.BaseTx, idx uint32, assetID ids.ID, out verify.State) error {
+func IngestTxOutput(ctx services.ConsumerCtx, txID ids.ID, tx avax.BaseTx, idx uint32, assetID ids.ID, out verify.State) error {
 	// func IngestTxOutput(ctx services.ConsumerCtx, tx avax.BaseTx, idx uint32, out avax.TransferableOutput) error {
 	errs := wrappers.Errs{}
 
@@ -122,13 +124,20 @@ func IngestTxOutput(ctx services.ConsumerCtx, tx avax.BaseTx, idx uint32, assetI
 	case avax.TransferableOut:
 	}
 
-	id := (&avax.UTXOID{TxID: tx.ID(), OutputIndex: idx}).InputID()
+	if txID.ID == nil {
+		fmt.Println(tx)
+		fmt.Println(tx.Bytes())
+		fmt.Println(hashing.ComputeHash256(tx.Bytes()))
+
+		panic("txid is nil")
+	}
+	id := (&avax.UTXOID{TxID: txID, OutputIndex: idx}).InputID()
 
 	builder := ctx.DB().
 		InsertInto("avm_outputs").
 		Pair("id", id.String()).
 		Pair("chain_id", tx.BlockchainID.String()).
-		Pair("transaction_id", tx.ID().String()).
+		Pair("transaction_id", txID.String()).
 		Pair("output_index", idx).
 		Pair("asset_id", assetID.String()).
 		Pair("created_at", ctx.Time())

@@ -6,6 +6,7 @@ package avm
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/ava-labs/gecko/database"
 	"github.com/ava-labs/gecko/database/nodb"
@@ -203,6 +204,7 @@ func (i *Index) Close(ctx context.Context) error {
 
 // newAVMCodec creates an producer instance that we can use to parse txs
 func newAVMCodec(chainID ids.ID, networkID uint32) (codec.Codec, error) {
+	time.Sleep(1 * time.Second)
 	g, err := genesis.VMGenesis(networkID, avm.ID)
 	if err != nil {
 		return nil, err

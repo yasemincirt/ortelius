@@ -6,6 +6,7 @@ package avm
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/codec"
@@ -22,6 +23,7 @@ import (
 )
 
 func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int64) error {
+	return nil
 	var (
 		err  error
 		job  = db.stream.NewJob("bootstrap")
@@ -52,7 +54,12 @@ func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int6
 
 	cCtx := services.NewConsumerContext(ctx, job, dbTx, timestamp)
 	for _, tx := range avmGenesis.Txs {
-		if err = db.ingestTx(cCtx, tx.Bytes()); err != nil {
+		bytes, err := db.codec.Marshal(tx)
+		if err != nil {
+			return err
+		}
+
+		if err = db.ingestTx(cCtx, bytes); err != nil {
 			return err
 		}
 	}
@@ -105,6 +112,8 @@ func (db *DB) Index(ctx context.Context, i services.Consumable) error {
 func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 	tx, err := parseTx(db.codec, txBytes)
 	if err != nil {
+		fmt.Println("txBytes:", txBytes)
+		panic(err)
 		return err
 	}
 
@@ -141,7 +150,7 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 		return errors.New("unknown tx type")
 	}
 
-	errs.Add(index.IngestBaseTx(ctx, tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Credentials()))
+	errs.Add(index.IngestBaseTx(ctx, tx.ID(), tx.UnsignedBytes(), &baseTx.BaseTx, txType, tx.Credentials()))
 
 	return errs.Err
 }
@@ -198,6 +207,8 @@ func parseTx(c codec.Codec, bytes []byte) (*avm.Tx, error) {
 	tx := &avm.Tx{}
 	err := c.Unmarshal(bytes, tx)
 	if err != nil {
+		fmt.Println("bytes:", bytes)
+		panic(err)
 		return nil, err
 	}
 	unsignedBytes, err := c.Marshal(&tx.UnsignedTx)

@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"github.com/ava-labs/gecko/utils/codec"
+	"github.com/ava-labs/gecko/vms/platformvm"
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/health"
 )
@@ -25,11 +26,11 @@ type DB struct {
 }
 
 // NewDBIndex creates a new DB for the given config
-func NewDBIndex(stream *health.Stream, db *dbr.Connection, networkID uint32, chainID string, codec codec.Codec) *DB {
+func NewDBIndex(stream *health.Stream, db *dbr.Connection, networkID uint32, chainID string) *DB {
 	return &DB{
 		networkID: networkID,
 		chainID:   chainID,
-		codec:     codec,
+		codec:     platformvm.Codec,
 		stream:    stream,
 		db:        db,
 	}
