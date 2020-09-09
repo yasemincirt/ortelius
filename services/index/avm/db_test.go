@@ -17,7 +17,6 @@ import (
 
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
-	"github.com/ava-labs/ortelius/services/index"
 	"github.com/ava-labs/ortelius/services/models"
 )
 
@@ -133,7 +132,7 @@ func TestIndexBootstrap(t *testing.T) {
 	)
 
 	db := idx.db.newSession("test_index_bootstrap")
-	assertAllTransactionsCorrect(t, db, []index.Transaction{{
+	assertAllTransactionsCorrect(t, db, []models.Transaction{{
 		ID:                     txID,
 		ChainID:                models.ToStringID(testXChainID),
 		CanonicalSerialization: createAssetTx,
@@ -171,8 +170,8 @@ func TestIndexVectors(t *testing.T) {
 	}
 }
 
-func assertAllTransactionsCorrect(t *testing.T, db dbr.SessionRunner, expecteds []index.Transaction) {
-	txs := []index.Transaction{}
+func assertAllTransactionsCorrect(t *testing.T, db dbr.SessionRunner, expecteds []models.Transaction) {
+	txs := []models.Transaction{}
 	if _, err := db.
 		Select("*").
 		From("avm_transactions").
@@ -183,7 +182,7 @@ func assertAllTransactionsCorrect(t *testing.T, db dbr.SessionRunner, expecteds 
 	assertCorrectTransactions(t, expecteds, txs)
 }
 
-func assertCorrectTransactions(t *testing.T, expecteds, actuals []index.Transaction) {
+func assertCorrectTransactions(t *testing.T, expecteds, actuals []models.Transaction) {
 	if len(actuals) != len(expecteds) {
 		t.Fatal("Wrong transactions count:", len(actuals))
 	}
@@ -193,7 +192,7 @@ func assertCorrectTransactions(t *testing.T, expecteds, actuals []index.Transact
 	}
 }
 
-func assertCorrectTransaction(t *testing.T, expected, actual index.Transaction) {
+func assertCorrectTransaction(t *testing.T, expected, actual models.Transaction) {
 	if !actual.ID.Equals(expected.ID) {
 		t.Fatal("Wrong id:", actual.ID)
 	}
@@ -211,8 +210,8 @@ func assertCorrectTransaction(t *testing.T, expected, actual index.Transaction) 
 	}
 }
 
-func assertAllOutputsCorrect(t *testing.T, db dbr.SessionRunner, expecteds []index.Output) {
-	outputs := []index.Output{}
+func assertAllOutputsCorrect(t *testing.T, db dbr.SessionRunner, expecteds []models.Output) {
+	outputs := []models.Output{}
 	if _, err := db.
 		Select("*").
 		From("avm_outputs").
@@ -222,7 +221,7 @@ func assertAllOutputsCorrect(t *testing.T, db dbr.SessionRunner, expecteds []ind
 	assertCorrectOutputs(t, expecteds, outputs)
 }
 
-func assertCorrectOutputs(t *testing.T, expecteds, actuals []index.Output) {
+func assertCorrectOutputs(t *testing.T, expecteds, actuals []models.Output) {
 	if len(actuals) != len(expecteds) {
 		t.Fatal("Wrong Output count:", len(actuals))
 	}
@@ -235,7 +234,7 @@ func assertCorrectOutputs(t *testing.T, expecteds, actuals []index.Output) {
 	}
 }
 
-func assertCorrectOutput(t *testing.T, expected, actual index.Output) {
+func assertCorrectOutput(t *testing.T, expected, actual models.Output) {
 	if !actual.TransactionID.Equals(expected.TransactionID) {
 		t.Fatal("Wrong Output Transaction id:", actual.TransactionID)
 	}
@@ -269,8 +268,8 @@ func assertCorrectOutput(t *testing.T, expected, actual index.Output) {
 	}
 }
 
-func assertAllOutputAddressesCorrect(t *testing.T, db dbr.SessionRunner, expecteds []index.OutputAddress) {
-	outputAddresses := []index.OutputAddress{}
+func assertAllOutputAddressesCorrect(t *testing.T, db dbr.SessionRunner, expecteds []models.OutputAddress) {
+	outputAddresses := []models.OutputAddress{}
 	if _, err := db.
 		Select("*").
 		From("avm_output_addresses").
@@ -280,7 +279,7 @@ func assertAllOutputAddressesCorrect(t *testing.T, db dbr.SessionRunner, expecte
 	assertCorrectOutputAddresses(t, expecteds, outputAddresses)
 }
 
-func assertCorrectOutputAddresses(t *testing.T, expecteds, actuals []index.OutputAddress) {
+func assertCorrectOutputAddresses(t *testing.T, expecteds, actuals []models.OutputAddress) {
 	if len(actuals) != len(expecteds) {
 		t.Fatal("Wrong Output addresses count:", len(actuals))
 	}
@@ -293,7 +292,7 @@ func assertCorrectOutputAddresses(t *testing.T, expecteds, actuals []index.Outpu
 	}
 }
 
-func assertCorrectOutputAddress(t *testing.T, expected, actual index.OutputAddress) {
+func assertCorrectOutputAddress(t *testing.T, expected, actual models.OutputAddress) {
 	if !actual.OutputID.Equals(expected.OutputID) {
 		t.Fatal("Wrong Output id:", actual.OutputID)
 	}
@@ -313,13 +312,13 @@ func newTestContext() context.Context {
 	return ctx
 }
 
-type outputsLexically []index.Output
+type outputsLexically []models.Output
 
 func (o outputsLexically) Len() int           { return len(o) }
 func (o outputsLexically) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
 func (o outputsLexically) Less(i, j int) bool { return o[i].ID < o[j].ID }
 
-type outputAddrsLexically []index.OutputAddress
+type outputAddrsLexically []models.OutputAddress
 
 func (o outputAddrsLexically) Len() int      { return len(o) }
 func (o outputAddrsLexically) Swap(i, j int) { o[i], o[j] = o[j], o[i] }

@@ -5,6 +5,7 @@ package models
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/ava-labs/gecko/ids"
 	"github.com/ava-labs/gecko/utils/constants"
@@ -49,4 +50,22 @@ func (addr Address) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(bech32Addr)
+}
+
+// TransactionType represents a sub class of Transaction
+type TransactionType string
+
+// OutputType represents a sub class of Output
+type OutputType uint32
+
+// SearchResultType is the type for an object found from a search query.
+type SearchResultType string
+
+// AssetTokenCounts maps asset IDs to a TokenAmount for that asset
+type AssetTokenCounts map[StringID]TokenAmount
+
+type TokenAmount string
+
+func TokenAmountForUint64(i uint64) TokenAmount {
+	return TokenAmount(strconv.Itoa(int(i)))
 }

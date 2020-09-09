@@ -19,6 +19,7 @@ import (
 
 	"github.com/ava-labs/ortelius/services"
 	"github.com/ava-labs/ortelius/services/index"
+	"github.com/ava-labs/ortelius/services/models"
 )
 
 func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int64) error {
@@ -56,7 +57,7 @@ func (db *DB) bootstrap(ctx context.Context, genesisBytes []byte, timestamp int6
 	cCtx := services.NewConsumerContext(ctx, job, dbTx, timestamp)
 	for _, tx := range avmGenesis.Txs {
 		errs.Add(db.ingestCreateAssetTx(cCtx, tx.ID(), &tx.CreateAssetTx, tx.Alias))
-		errs.Add(index.IngestBaseTx(cCtx, tx.ID(), tx.UnsignedBytes(), &tx.BaseTx.BaseTx, index.TXTypeGenesisAsset, nil))
+		errs.Add(index.IngestBaseTx(cCtx, tx.ID(), tx.UnsignedBytes(), &tx.BaseTx.BaseTx, models.TXTypeGenesisAsset, nil))
 	}
 
 	if err := dbTx.Commit(); err != nil {
@@ -114,7 +115,7 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 		txID   = ids.NewID(hashing.ComputeHash256Array(txBytes))
 		errs   = wrappers.Errs{}
 		baseTx *avm.BaseTx
-		txType = index.TXTypeBase
+		txType = models.TXTypeBase
 	)
 
 	// Handle type-specific processing
@@ -122,18 +123,18 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 	case *avm.BaseTx:
 		baseTx = castTx
 	case *avm.OperationTx:
-		txType = index.TXTypeOperation
+		txType = models.TXTypeOperation
 		baseTx = &castTx.BaseTx
 	case *avm.ImportTx:
-		txType = index.TXTypeImport
+		txType = models.TXTypeImport
 		baseTx = &castTx.BaseTx
 		castTx.BaseTx.Ins = append(castTx.BaseTx.Ins, castTx.Ins...)
 	case *avm.ExportTx:
-		txType = index.TXTypeExport
+		txType = models.TXTypeExport
 		baseTx = &castTx.BaseTx
 		castTx.BaseTx.Outs = append(castTx.BaseTx.Outs, castTx.Outs...)
 	case *avm.CreateAssetTx:
-		txType = index.TXTypeCreateAsset
+		txType = models.TXTypeCreateAsset
 		baseTx = &castTx.BaseTx
 		errs.Add(db.ingestCreateAssetTx(ctx, txID, castTx, ""))
 	default:

@@ -22,6 +22,7 @@ import (
 	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
 	"github.com/ava-labs/ortelius/services/index"
+	"github.com/ava-labs/ortelius/services/models"
 )
 
 var (
@@ -126,25 +127,25 @@ func (w *Writers) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error 
 	var (
 		errs        = wrappers.Errs{}
 		commonBlock platformvm.CommonBlock
-		blockType   index.BlockType
+		blockType   models.BlockType
 	)
 	switch blk := block.(type) {
 	case *platformvm.StandardBlock:
 		// blk.Initialize(&platformvm.VM{}, blockBytes)
-		commonBlock, blockType = blk.CommonBlock, index.BlockTypeStandard
+		commonBlock, blockType = blk.CommonBlock, models.BlockTypeStandard
 		for _, tx := range blk.Txs {
 			errs.Add(w.indexTx(ctx, *tx))
 		}
 	case *platformvm.ProposalBlock:
-		commonBlock, blockType = blk.CommonBlock, index.BlockTypeProposal
+		commonBlock, blockType = blk.CommonBlock, models.BlockTypeProposal
 		errs.Add(w.indexTx(ctx, blk.Tx))
 	case *platformvm.AtomicBlock:
-		commonBlock, blockType = blk.CommonBlock, index.BlockTypeAtomic
+		commonBlock, blockType = blk.CommonBlock, models.BlockTypeAtomic
 		errs.Add(w.indexTx(ctx, blk.Tx))
 	case *platformvm.Abort:
-		commonBlock, blockType = blk.CommonBlock, index.BlockTypeAbort
+		commonBlock, blockType = blk.CommonBlock, models.BlockTypeAbort
 	case *platformvm.Commit:
-		commonBlock, blockType = blk.CommonBlock, index.BlockTypeCommit
+		commonBlock, blockType = blk.CommonBlock, models.BlockTypeCommit
 	default:
 		return ctx.Job().EventErr("index_block", ErrUnknownBlockType)
 	}
@@ -168,7 +169,7 @@ func (w *Writers) indexTx(ctx services.ConsumerCtx, tx platformvm.Tx) error {
 	var (
 		errs   = wrappers.Errs{}
 		baseTx *platformvm.BaseTx
-		txType = index.TXTypeBase
+		txType = models.TXTypeBase
 	)
 
 	txBytes, err := w.codec.Marshal(tx)
@@ -182,11 +183,11 @@ func (w *Writers) indexTx(ctx services.ConsumerCtx, tx platformvm.Tx) error {
 	case *platformvm.UnsignedAdvanceTimeTx:
 		return nil
 	case *platformvm.UnsignedCreateSubnetTx:
-		txType = index.TXTypeCreateSubnet
+		txType = models.TXTypeCreateSubnet
 		baseTx = &typedTx.BaseTx
 		errs.Add(w.indexCreateSubnetTx(ctx, txID, typedTx))
 	case *platformvm.UnsignedCreateChainTx:
-		txType = index.TXTypeCreateChain
+		txType = models.TXTypeCreateChain
 		baseTx = &typedTx.BaseTx
 		baseTxCredsLen := len(tx.Creds) - 1
 		var subnetCred = verify.Verifiable(nil)
@@ -197,24 +198,24 @@ func (w *Writers) indexTx(ctx services.ConsumerCtx, tx platformvm.Tx) error {
 		errs.Add(w.indexCreateChainTx(ctx, txID, typedTx, subnetCred))
 
 	case *platformvm.UnsignedImportTx:
-		txType = index.TXTypeImport
+		txType = models.TXTypeImport
 		typedTx.BaseTx.Ins = append(typedTx.BaseTx.Ins, typedTx.ImportedInputs...)
 		baseTx = &typedTx.BaseTx
 	case *platformvm.UnsignedExportTx:
-		txType = index.TXTypeExport
+		txType = models.TXTypeExport
 		typedTx.BaseTx.Outs = append(typedTx.BaseTx.Outs, typedTx.ExportedOutputs...)
 		baseTx = &typedTx.BaseTx
 
 	case *platformvm.UnsignedAddValidatorTx:
-		txType = index.TXTypeAddValidator
+		txType = models.TXTypeAddValidator
 		baseTx = &typedTx.BaseTx
 		// errs.Add(w.indexValidator(ctx, txID, typedTx))
 	case *platformvm.UnsignedAddSubnetValidatorTx:
-		txType = index.TXTypeAddSubnetValidator
+		txType = models.TXTypeAddSubnetValidator
 		baseTx = &typedTx.BaseTx
 		// errs.Add(w.indexValidator(ctx, txID, typedTx))
 	case *platformvm.UnsignedAddDelegatorTx:
-		txType = index.TXTypeAddDelegator
+		txType = models.TXTypeAddDelegator
 		baseTx = &typedTx.BaseTx
 		// errs.Add(w.indexValidator(ctx, txID, typedTx))
 	default:

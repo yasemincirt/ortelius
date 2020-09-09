@@ -14,7 +14,6 @@ import (
 	"github.com/ava-labs/gecko/ids"
 	"github.com/gocraft/dbr/v2"
 
-	"github.com/ava-labs/ortelius/services/index"
 	"github.com/ava-labs/ortelius/services/models"
 	"github.com/ava-labs/ortelius/services/params"
 )
@@ -44,7 +43,7 @@ var (
 	}
 )
 
-func (db *DB) Search(ctx context.Context, p *SearchParams) (*index.SearchResults, error) {
+func (db *DB) Search(ctx context.Context, p *SearchParams) (*models.SearchResults, error) {
 	if len(p.Query) < MinSearchQueryLength {
 		return nil, ErrSearchQueryTooShort
 	}
@@ -87,7 +86,7 @@ func (db *DB) Search(ctx context.Context, p *SearchParams) (*index.SearchResults
 	return collateSearchResults(assets, addresses, transactions, nil)
 }
 
-func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.AggregatesHistogram, error) {
+func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*models.AggregatesHistogram, error) {
 	// Validate params and set defaults if necessary
 	if params.StartTime.IsZero() {
 		var err error
@@ -150,7 +149,7 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 			Limit(uint64(requestedIntervalCount))
 	}
 
-	intervals := []index.Aggregates{}
+	intervals := []models.Aggregates{}
 	_, err := builder.LoadContext(ctx, &intervals)
 	if err != nil {
 		return nil, err
@@ -164,9 +163,9 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 		if len(intervals) > 0 {
 			intervals[0].StartTime = params.StartTime
 			intervals[0].EndTime = params.EndTime
-			return &index.AggregatesHistogram{Aggregates: intervals[0]}, nil
+			return &models.AggregatesHistogram{Aggregates: intervals[0]}, nil
 		}
-		return &index.AggregatesHistogram{}, nil
+		return &models.AggregatesHistogram{}, nil
 	}
 
 	// We need to return multiple intervals so build them now.
@@ -174,7 +173,7 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 	// with empty aggregates.
 	//
 	// We also add the start and end times of each interval to that interval
-	aggs := &index.AggregatesHistogram{IntervalSize: params.IntervalSize}
+	aggs := &models.AggregatesHistogram{IntervalSize: params.IntervalSize}
 
 	var startTS int64
 	timesForInterval := func(intervalIdx int) (time.Time, time.Time) {
@@ -186,9 +185,9 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 			time.Unix(startTS+intervalSeconds-1, 0).UTC()
 	}
 
-	padTo := func(slice []index.Aggregates, to int) []index.Aggregates {
+	padTo := func(slice []models.Aggregates, to int) []models.Aggregates {
 		for i := len(slice); i < to; i = len(slice) {
-			slice = append(slice, index.Aggregates{Idx: i})
+			slice = append(slice, models.Aggregates{Idx: i})
 			slice[i].StartTime, slice[i].EndTime = timesForInterval(i)
 		}
 		return slice
@@ -196,7 +195,7 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 
 	// Collect the overall counts and pad the intervals to include empty intervals
 	// which are not returned by the db
-	aggs.Aggregates = index.Aggregates{StartTime: params.StartTime, EndTime: params.EndTime}
+	aggs.Aggregates = models.Aggregates{StartTime: params.StartTime, EndTime: params.EndTime}
 	var (
 		bigIntFromStringOK bool
 		totalVolume        = big.NewInt(0)
@@ -204,7 +203,7 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 	)
 
 	// Add each interval, but first pad up to that interval's index
-	aggs.Intervals = make([]index.Aggregates, 0, requestedIntervalCount)
+	aggs.Intervals = make([]models.Aggregates, 0, requestedIntervalCount)
 	for _, interval := range intervals {
 		// Pad up to this interval's position
 		aggs.Intervals = padTo(aggs.Intervals, interval.Idx)
@@ -229,7 +228,7 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 		aggs.Intervals = append(aggs.Intervals, interval)
 	}
 	// Add total aggregated token amounts
-	aggs.Aggregates.TransactionVolume = index.TokenAmount(totalVolume.String())
+	aggs.Aggregates.TransactionVolume = models.TokenAmount(totalVolume.String())
 
 	// Add any missing trailing intervals
 	aggs.Intervals = padTo(aggs.Intervals, requestedIntervalCount)
@@ -237,10 +236,10 @@ func (db *DB) Aggregate(ctx context.Context, params *AggregateParams) (*index.Ag
 	return aggs, nil
 }
 
-func (db *DB) ListTransactions(ctx context.Context, p *ListTransactionsParams) (*index.TransactionList, error) {
+func (db *DB) ListTransactions(ctx context.Context, p *ListTransactionsParams) (*models.TransactionList, error) {
 	dbRunner := db.newSession("get_transactions")
 
-	txs := []*index.Transaction{}
+	txs := []*models.Transaction{}
 	builder := p.Apply(dbRunner.
 		Select("avm_transactions.id", "avm_transactions.chain_id", "avm_transactions.type", "avm_transactions.memo as memo", "avm_transactions.created_at").
 		From("avm_transactions").
@@ -284,13 +283,13 @@ func (db *DB) ListTransactions(ctx context.Context, p *ListTransactionsParams) (
 		return nil, err
 	}
 
-	return &index.TransactionList{index.ListMetadata{count}, txs}, nil
+	return &models.TransactionList{models.ListMetadata{count}, txs}, nil
 }
 
-func (db *DB) ListAssets(ctx context.Context, p *ListAssetsParams) (*index.AssetList, error) {
+func (db *DB) ListAssets(ctx context.Context, p *ListAssetsParams) (*models.AssetList, error) {
 	dbRunner := db.newSession("list_assets")
 
-	assets := []*index.Asset{}
+	assets := []*models.Asset{}
 	_, err := p.Apply(dbRunner.
 		Select("id", "chain_id", "name", "symbol", "alias", "denomination", "current_supply", "created_at").
 		From("avm_assets").
@@ -313,13 +312,13 @@ func (db *DB) ListAssets(ctx context.Context, p *ListAssetsParams) (*index.Asset
 		}
 	}
 
-	return &index.AssetList{index.ListMetadata{count}, assets}, nil
+	return &models.AssetList{models.ListMetadata{count}, assets}, nil
 }
 
-func (db *DB) ListAddresses(ctx context.Context, p *ListAddressesParams) (*index.AddressList, error) {
+func (db *DB) ListAddresses(ctx context.Context, p *ListAddressesParams) (*models.AddressList, error) {
 	dbRunner := db.newSession("list_addresses")
 
-	addresses := []*index.Address{}
+	addresses := []*models.AddressInfo{}
 	_, err := p.Apply(dbRunner.
 		Select("DISTINCT(avm_output_addresses.address)", "addresses.public_key").
 		From("avm_output_addresses").
@@ -346,13 +345,13 @@ func (db *DB) ListAddresses(ctx context.Context, p *ListAddressesParams) (*index
 		return nil, err
 	}
 
-	return &index.AddressList{index.ListMetadata{count}, addresses}, nil
+	return &models.AddressList{models.ListMetadata{count}, addresses}, nil
 }
 
-func (db *DB) ListOutputs(ctx context.Context, p *ListOutputsParams) (*index.OutputList, error) {
+func (db *DB) ListOutputs(ctx context.Context, p *ListOutputsParams) (*models.OutputList, error) {
 	dbRunner := db.newSession("list_transaction_outputs")
 
-	outputs := []*index.Output{}
+	outputs := []*models.Output{}
 	_, err := p.Apply(dbRunner.
 		Select(outputSelectColumns...).
 		From("avm_outputs").
@@ -362,17 +361,17 @@ func (db *DB) ListOutputs(ctx context.Context, p *ListOutputsParams) (*index.Out
 	}
 
 	if len(outputs) < 1 {
-		return &index.OutputList{Outputs: outputs}, nil
+		return &models.OutputList{Outputs: outputs}, nil
 	}
 
 	outputIDs := make([]models.StringID, len(outputs))
-	outputMap := make(map[models.StringID]*index.Output, len(outputs))
+	outputMap := make(map[models.StringID]*models.Output, len(outputs))
 	for i, output := range outputs {
 		outputIDs[i] = output.ID
 		outputMap[output.ID] = output
 	}
 
-	addresses := []*index.OutputAddress{}
+	addresses := []*models.OutputAddress{}
 	_, err = dbRunner.
 		Select(
 			"avm_output_addresses.output_id",
@@ -408,7 +407,7 @@ func (db *DB) ListOutputs(ctx context.Context, p *ListOutputsParams) (*index.Out
 		}
 	}
 
-	return &index.OutputList{index.ListMetadata{count}, outputs}, err
+	return &models.OutputList{models.ListMetadata{count}, outputs}, err
 }
 
 //
@@ -428,7 +427,7 @@ func (db *DB) getFirstTransactionTime(ctx context.Context) (time.Time, error) {
 	return time.Unix(ts, 0).UTC(), nil
 }
 
-func (db *DB) searchByID(ctx context.Context, id ids.ID) (*index.SearchResults, error) {
+func (db *DB) searchByID(ctx context.Context, id ids.ID) (*models.SearchResults, error) {
 	if assets, err := db.ListAssets(ctx, &ListAssetsParams{ID: &id}); err != nil {
 		return nil, err
 	} else if len(assets.Assets) > 0 {
@@ -441,20 +440,20 @@ func (db *DB) searchByID(ctx context.Context, id ids.ID) (*index.SearchResults, 
 		return collateSearchResults(nil, nil, txs, nil)
 	}
 
-	return &index.SearchResults{}, nil
+	return &models.SearchResults{}, nil
 }
 
-func (db *DB) searchByShortID(ctx context.Context, id ids.ShortID) (*index.SearchResults, error) {
+func (db *DB) searchByShortID(ctx context.Context, id ids.ShortID) (*models.SearchResults, error) {
 	if addrs, err := db.ListAddresses(ctx, &ListAddressesParams{Address: &id}); err != nil {
 		return nil, err
 	} else if len(addrs.Addresses) > 0 {
 		return collateSearchResults(nil, addrs, nil, nil)
 	}
 
-	return &index.SearchResults{}, nil
+	return &models.SearchResults{}, nil
 }
 
-func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*index.Transaction) error {
+func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*models.Transaction) error {
 	if len(txs) == 0 {
 		return nil
 	}
@@ -467,8 +466,8 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 
 	// Load each Transaction Output for the tx, both inputs and outputs
 	outputsAndAddress := []*struct {
-		index.Output
-		index.OutputAddress
+		models.Output
+		models.OutputAddress
 	}{}
 
 	avm_outputs_by_tid := dbRunner.Select(outputSelectColumns...).
@@ -505,12 +504,12 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 	}
 
 	// Create maps for all Transaction outputs and Input Transaction outputs
-	outputMap := map[models.StringID]*index.Output{}
+	outputMap := map[models.StringID]*models.Output{}
 
-	inputsMap := map[models.StringID][]*index.Input{}
+	inputsMap := map[models.StringID][]*models.Input{}
 	inputTotalsMap := map[models.StringID]map[models.StringID]*big.Int{}
 
-	outputsMap := map[models.StringID][]*index.Output{}
+	outputsMap := map[models.StringID][]*models.Output{}
 	outputTotalsMap := map[models.StringID]map[models.StringID]*big.Int{}
 
 	addToBigIntMap := func(m map[models.StringID]*big.Int, assetID models.StringID, amt *big.Int) {
@@ -528,14 +527,14 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 		out.Addresses = []models.Address{}
 
 		if _, ok := inputsMap[out.RedeemingTransactionID]; !ok {
-			inputsMap[out.RedeemingTransactionID] = []*index.Input{}
+			inputsMap[out.RedeemingTransactionID] = []*models.Input{}
 		}
 
 		if _, ok := inputTotalsMap[out.RedeemingTransactionID]; !ok {
 			inputTotalsMap[out.RedeemingTransactionID] = map[models.StringID]*big.Int{}
 		}
 		if _, ok := outputsMap[out.TransactionID]; !ok {
-			outputsMap[out.TransactionID] = []*index.Output{}
+			outputsMap[out.TransactionID] = []*models.Output{}
 		}
 
 		if _, ok := outputTotalsMap[out.TransactionID]; !ok {
@@ -547,7 +546,7 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 			return errors.New("invalid amount")
 		}
 
-		inputsMap[out.RedeemingTransactionID] = append(inputsMap[out.RedeemingTransactionID], &index.Input{Output: out})
+		inputsMap[out.RedeemingTransactionID] = append(inputsMap[out.RedeemingTransactionID], &models.Input{Output: out})
 		addToBigIntMap(inputTotalsMap[out.RedeemingTransactionID], out.AssetID, bigAmt)
 
 		outputsMap[out.TransactionID] = append(outputsMap[out.TransactionID], out)
@@ -555,7 +554,7 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 	}
 
 	// Collect the addresses into a list on each Output
-	var input *index.Input
+	var input *models.Input
 	for _, outputAddress := range outputsAndAddress {
 		output, ok := outputMap[outputAddress.OutputID]
 		if !ok {
@@ -576,7 +575,7 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 		// Get the Input and add the credentials for this Address
 		for _, input = range inputs {
 			if input.Output.ID.Equals(outputAddress.OutputID) {
-				input.Creds = append(input.Creds, index.InputCredentials{
+				input.Creds = append(input.Creds, models.InputCredentials{
 					Address:   outputAddress.Address,
 					PublicKey: outputAddress.PublicKey,
 					Signature: outputAddress.Signature,
@@ -591,39 +590,39 @@ func dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner, txs []*i
 		tx.Inputs = append(tx.Inputs, inputsMap[tx.ID]...)
 		tx.Outputs = append(tx.Outputs, outputsMap[tx.ID]...)
 
-		tx.InputTotals = make(index.AssetTokenCounts, len(inputTotalsMap[tx.ID]))
+		tx.InputTotals = make(models.AssetTokenCounts, len(inputTotalsMap[tx.ID]))
 		for k, v := range inputTotalsMap[tx.ID] {
-			tx.InputTotals[k] = index.TokenAmount(v.String())
+			tx.InputTotals[k] = models.TokenAmount(v.String())
 		}
 
-		tx.OutputTotals = make(index.AssetTokenCounts, len(outputTotalsMap[tx.ID]))
+		tx.OutputTotals = make(models.AssetTokenCounts, len(outputTotalsMap[tx.ID]))
 		for k, v := range outputTotalsMap[tx.ID] {
-			tx.OutputTotals[k] = index.TokenAmount(v.String())
+			tx.OutputTotals[k] = models.TokenAmount(v.String())
 		}
 	}
 
 	return nil
 }
 
-func dressAddresses(ctx context.Context, dbRunner dbr.SessionRunner, addrs []*index.Address) error {
+func dressAddresses(ctx context.Context, dbRunner dbr.SessionRunner, addrs []*models.AddressInfo) error {
 	if len(addrs) == 0 {
 		return nil
 	}
 
 	// Create a list of ids for querying, and a map for accumulating results later
 	addrIDs := make([]models.Address, len(addrs))
-	addrsByID := make(map[models.Address]*index.Address, len(addrs))
+	addrsByID := make(map[models.Address]*models.AddressInfo, len(addrs))
 	for i, addr := range addrs {
 		addrIDs[i] = addr.Address
 		addrsByID[addr.Address] = addr
 
-		addr.Assets = make(map[models.StringID]index.AssetInfo, 1)
+		addr.Assets = make(map[models.StringID]models.AssetInfo, 1)
 	}
 
 	// Load each Transaction Output for the tx, both inputs and outputs
 	rows := []*struct {
 		Address models.Address `json:"address"`
-		index.AssetInfo
+		models.AssetInfo
 	}{}
 
 	_, err := dbRunner.
@@ -657,12 +656,12 @@ func dressAddresses(ctx context.Context, dbRunner dbr.SessionRunner, addrs []*in
 	return nil
 }
 
-func collateSearchResults(assetResults *index.AssetList, addressResults *index.AddressList, transactionResults *index.TransactionList, _ *index.OutputList) (*index.SearchResults, error) {
+func collateSearchResults(assetResults *models.AssetList, addressResults *models.AddressList, transactionResults *models.TransactionList, _ *models.OutputList) (*models.SearchResults, error) {
 	var (
-		assets       []*index.Asset
-		addresses    []*index.Address
-		transactions []*index.Transaction
-		outputs      []*index.Output
+		assets       []*models.Asset
+		addresses    []*models.AddressInfo
+		transactions []*models.Transaction
+		outputs      []*models.Output
 	)
 
 	if assetResults != nil {
@@ -683,29 +682,29 @@ func collateSearchResults(assetResults *index.AssetList, addressResults *index.A
 		returnedResultCount = params.PaginationMaxLimit
 	}
 
-	collatedResults := &index.SearchResults{
+	collatedResults := &models.SearchResults{
 		Count: uint64(returnedResultCount),
 
 		// Create a container for our combined results
-		Results: make([]index.SearchResult, 0, returnedResultCount),
+		Results: make([]models.SearchResult, 0, returnedResultCount),
 	}
 
 	// Add each result to the list
 	for _, result := range assets {
-		collatedResults.Results = append(collatedResults.Results, index.SearchResult{
-			SearchResultType: index.ResultTypeAsset,
+		collatedResults.Results = append(collatedResults.Results, models.SearchResult{
+			SearchResultType: models.ResultTypeAsset,
 			Data:             result,
 		})
 	}
 	for _, result := range addresses {
-		collatedResults.Results = append(collatedResults.Results, index.SearchResult{
-			SearchResultType: index.ResultTypeAddress,
+		collatedResults.Results = append(collatedResults.Results, models.SearchResult{
+			SearchResultType: models.ResultTypeAddress,
 			Data:             result,
 		})
 	}
 	for _, result := range transactions {
-		collatedResults.Results = append(collatedResults.Results, index.SearchResult{
-			SearchResultType: index.ResultTypeTransaction,
+		collatedResults.Results = append(collatedResults.Results, models.SearchResult{
+			SearchResultType: models.ResultTypeTransaction,
 			Data:             result,
 		})
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/gocraft/health"
 
 	"github.com/ava-labs/ortelius/services"
+	"github.com/ava-labs/ortelius/services/models"
 )
 
 const (
@@ -58,7 +59,7 @@ func IsDuplicateEntryError(err error) bool {
 	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")
 }
 
-func IngestBaseTx(ctx services.ConsumerCtx, txID ids.ID, unsignedBytes []byte, baseTx *avax.BaseTx, txType TransactionType, creds []verify.Verifiable) error {
+func IngestBaseTx(ctx services.ConsumerCtx, txID ids.ID, unsignedBytes []byte, baseTx *avax.BaseTx, txType models.TransactionType, creds []verify.Verifiable) error {
 	var (
 		err   error
 		total uint64 = 0
@@ -172,7 +173,7 @@ func IngestTxOutput(ctx services.ConsumerCtx, txID ids.ID, tx avax.BaseTx, idx u
 
 	// secp256k1fx-specific fields
 	if secp256k1FxOut, ok := out.(*secp256k1fx.TransferOutput); ok {
-		builder.Pair("output_type", OutputTypesSECP2556K1Transfer).
+		builder.Pair("output_type", models.OutputTypesSECP2556K1Transfer).
 			Pair("amount", secp256k1FxOut.Amount()).
 			Pair("locktime", secp256k1FxOut.Locktime).
 			Pair("threshold", secp256k1FxOut.Threshold)

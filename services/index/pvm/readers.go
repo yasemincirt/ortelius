@@ -25,8 +25,8 @@ func NewReaders(db *index.DB) *Readers {
 	}
 }
 
-func (r *Readers) ListBlocks(ctx context.Context, params ListBlocksParams) (*index.BlockList, error) {
-	blocks := []*index.Block{}
+func (r *Readers) ListBlocks(ctx context.Context, params ListBlocksParams) (*models.BlockList, error) {
+	blocks := []*models.Block{}
 
 	_, err := params.Apply(r.newSession("list_blocks").
 		Select("id", "type", "parent_id", "chain_id", "created_at").
@@ -36,11 +36,11 @@ func (r *Readers) ListBlocks(ctx context.Context, params ListBlocksParams) (*ind
 	if err != nil {
 		return nil, err
 	}
-	return &index.BlockList{Blocks: blocks}, nil
+	return &models.BlockList{Blocks: blocks}, nil
 }
 
-func (r *Readers) ListSubnets(ctx context.Context, params ListSubnetsParams) (*index.SubnetList, error) {
-	subnets := []*index.Subnet{}
+func (r *Readers) ListSubnets(ctx context.Context, params ListSubnetsParams) (*models.SubnetList, error) {
+	subnets := []*models.Subnet{}
 	sess := r.newSession("list_subnets")
 	_, err := params.Apply(sess.
 		Select("id", "network_id", "threshold", "created_at").
@@ -54,11 +54,11 @@ func (r *Readers) ListSubnets(ctx context.Context, params ListSubnetsParams) (*i
 		return nil, err
 	}
 
-	return &index.SubnetList{Subnets: subnets}, nil
+	return &models.SubnetList{Subnets: subnets}, nil
 }
 
-func (r *Readers) ListValidators(ctx context.Context, params ListValidatorsParams) (*index.ValidatorList, error) {
-	validators := []*index.Validator{}
+func (r *Readers) ListValidators(ctx context.Context, params ListValidatorsParams) (*models.ValidatorList, error) {
+	validators := []*models.Validator{}
 
 	_, err := params.Apply(r.newSession("list_blocks").
 		Select("transaction_id", "node_id", "weight", "start_time", "end_time", "destination", "shares", "subnet_id").
@@ -68,11 +68,11 @@ func (r *Readers) ListValidators(ctx context.Context, params ListValidatorsParam
 	if err != nil {
 		return nil, err
 	}
-	return &index.ValidatorList{Validators: validators}, nil
+	return &models.ValidatorList{Validators: validators}, nil
 }
 
-func (r *Readers) ListChains(ctx context.Context, params ListChainsParams) (*index.ChainList, error) {
-	chains := []*index.Chain{}
+func (r *Readers) ListChains(ctx context.Context, params ListChainsParams) (*models.ChainList, error) {
+	chains := []*models.Chain{}
 
 	sess := r.newSession("list_chains")
 
@@ -91,10 +91,10 @@ func (r *Readers) ListChains(ctx context.Context, params ListChainsParams) (*ind
 		return nil, err
 	}
 
-	return &index.ChainList{Chains: chains}, nil
+	return &models.ChainList{Chains: chains}, nil
 }
 
-func (r *Readers) GetBlock(ctx context.Context, id ids.ID) (*index.Block, error) {
+func (r *Readers) GetBlock(ctx context.Context, id ids.ID) (*models.Block, error) {
 	list, err := r.ListBlocks(ctx, ListBlocksParams{ID: &id})
 	if err != nil || len(list.Blocks) == 0 {
 		return nil, err
@@ -102,7 +102,7 @@ func (r *Readers) GetBlock(ctx context.Context, id ids.ID) (*index.Block, error)
 	return list.Blocks[0], nil
 }
 
-func (r *Readers) GetSubnet(ctx context.Context, id ids.ID) (*index.Subnet, error) {
+func (r *Readers) GetSubnet(ctx context.Context, id ids.ID) (*models.Subnet, error) {
 	list, err := r.ListSubnets(ctx, ListSubnetsParams{ID: &id})
 	if err != nil || len(list.Subnets) == 0 {
 		return nil, err
@@ -110,7 +110,7 @@ func (r *Readers) GetSubnet(ctx context.Context, id ids.ID) (*index.Subnet, erro
 	return list.Subnets[0], nil
 }
 
-func (r *Readers) GetChain(ctx context.Context, id ids.ID) (*index.Chain, error) {
+func (r *Readers) GetChain(ctx context.Context, id ids.ID) (*models.Chain, error) {
 	list, err := r.ListChains(ctx, ListChainsParams{ID: &id})
 	if err != nil || len(list.Chains) == 0 {
 		return nil, err
@@ -118,7 +118,7 @@ func (r *Readers) GetChain(ctx context.Context, id ids.ID) (*index.Chain, error)
 	return list.Chains[0], nil
 }
 
-func (r *Readers) GetValidator(ctx context.Context, id ids.ID) (*index.Validator, error) {
+func (r *Readers) GetValidator(ctx context.Context, id ids.ID) (*models.Validator, error) {
 	list, err := r.ListValidators(ctx, ListValidatorsParams{ID: &id})
 	if err != nil || len(list.Validators) == 0 {
 		return nil, err
@@ -126,22 +126,22 @@ func (r *Readers) GetValidator(ctx context.Context, id ids.ID) (*index.Validator
 	return list.Validators[0], nil
 }
 
-func loadControlKeys(ctx context.Context, sess dbr.SessionRunner, subnets []*index.Subnet) error {
+func loadControlKeys(ctx context.Context, sess dbr.SessionRunner, subnets []*models.Subnet) error {
 	if len(subnets) < 1 {
 		return nil
 	}
 
-	subnetMap := make(map[models.StringID]*index.Subnet, len(subnets))
+	subnetMap := make(map[models.StringID]*models.Subnet, len(subnets))
 	ids := make([]models.StringID, len(subnets))
 	for i, s := range subnets {
 		ids[i] = s.ID
 		subnetMap[s.ID] = s
-		s.ControlKeys = []index.ControlKey{}
+		s.ControlKeys = []models.ControlKey{}
 	}
 
 	keys := []struct {
 		SubnetID models.StringID
-		Key      index.ControlKey
+		Key      models.ControlKey
 	}{}
 	_, err := sess.
 		Select("subnet_id", "address", "public_key").
@@ -161,22 +161,22 @@ func loadControlKeys(ctx context.Context, sess dbr.SessionRunner, subnets []*ind
 	return nil
 }
 
-func loadControlSignatures(ctx context.Context, sess dbr.SessionRunner, chains []*index.Chain) error {
+func loadControlSignatures(ctx context.Context, sess dbr.SessionRunner, chains []*models.Chain) error {
 	if len(chains) < 1 {
 		return nil
 	}
 
-	chainMap := make(map[models.StringID]*index.Chain, len(chains))
+	chainMap := make(map[models.StringID]*models.Chain, len(chains))
 	ids := make([]models.StringID, len(chains))
 	for i, c := range chains {
 		ids[i] = c.ID
 		chainMap[c.ID] = c
-		c.ControlSignatures = []index.ControlSignature{}
+		c.ControlSignatures = []models.ControlSignature{}
 	}
 
 	sigs := []struct {
 		ChainID   models.StringID
-		Signature index.ControlSignature
+		Signature models.ControlSignature
 	}{}
 	_, err := sess.
 		Select("chain_id", "signature").
@@ -196,12 +196,12 @@ func loadControlSignatures(ctx context.Context, sess dbr.SessionRunner, chains [
 	return nil
 }
 
-func loadFXIDs(ctx context.Context, sess dbr.SessionRunner, chains []*index.Chain) error {
+func loadFXIDs(ctx context.Context, sess dbr.SessionRunner, chains []*models.Chain) error {
 	if len(chains) < 1 {
 		return nil
 	}
 
-	chainMap := make(map[models.StringID]*index.Chain, len(chains))
+	chainMap := make(map[models.StringID]*models.Chain, len(chains))
 	ids := make([]models.StringID, len(chains))
 	for i, c := range chains {
 		ids[i] = c.ID
