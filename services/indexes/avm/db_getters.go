@@ -519,7 +519,7 @@ func (db *DB) dressTransactions(ctx context.Context, dbRunner dbr.SessionRunner,
 		if !ok {
 			continue
 		}
-		output.Addresses = append(output.Addresses, outputAddress.Address)
+		outputAddress.Addresses = append(outputAddress.Addresses, outputAddress.Address)
 
 		// If this Address didn't sign any txs then we're done
 		if len(outputAddress.Signature) == 0 {
