@@ -142,11 +142,11 @@ func (db *DB) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 	case *avm.OperationTx:
 		// 	db.ingestOperationTx(ctx, tx)
 	case *avm.ImportTx:
-		return db.ingestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, TXTypeImport)
+		return db.ingestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, models.TXTypeImport)
 	case *avm.ExportTx:
-		return db.ingestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, TXTypeExport)
+		return db.ingestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, models.TXTypeExport)
 	case *avm.BaseTx:
-		return db.ingestBaseTx(ctx, txBytes, tx, castTx, TXTypeBase)
+		return db.ingestBaseTx(ctx, txBytes, tx, castTx, models.TXTypeBase)
 	default:
 		return errors.New("unknown tx type")
 	}
@@ -209,7 +209,7 @@ func (db *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, tx *
 		InsertInto("avm_transactions").
 		Pair("id", txID.String()).
 		Pair("chain_id", db.chainID).
-		Pair("type", TXTypeCreateAsset).
+		Pair("type", models.TXTypeCreateAsset).
 		Pair("memo", tx.Memo).
 		Pair("created_at", ctx.Time()).
 		Pair("canonical_serialization", txBytes).
@@ -327,7 +327,7 @@ func (db *DB) ingestOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32, as
 		Pair("transaction_id", txID.String()).
 		Pair("output_index", idx).
 		Pair("asset_id", assetID.String()).
-		Pair("output_type", OutputTypesSECP2556K1Transfer).
+		Pair("output_type", models.OutputTypesSECP2556K1Transfer).
 		Pair("amount", out.Amount()).
 		Pair("created_at", ctx.Time()).
 		Pair("locktime", out.Locktime).
@@ -343,7 +343,7 @@ func (db *DB) ingestOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32, as
 			if _, err = ctx.DB().
 				Update("avm_outputs").
 				Set("chain_id", db.chainID).
-				Set("output_type", OutputTypesSECP2556K1Transfer).
+				Set("output_type", models.OutputTypesSECP2556K1Transfer).
 				Set("amount", out.Amount()).
 				Set("locktime", out.Locktime).
 				Set("threshold", out.Threshold).
