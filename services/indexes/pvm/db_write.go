@@ -15,6 +15,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm"
 
 	"github.com/ava-labs/ortelius/services"
+	"github.com/ava-labs/ortelius/services/indexes/models"
 )
 
 var (
@@ -102,12 +103,12 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 	case *platformvm.ProposalBlock:
 		errs := wrappers.Errs{}
 		errs.Add(
-			db.indexCommonBlock(ctx, BlockTypeProposal, blk.CommonBlock, blockBytes),
+			db.indexCommonBlock(ctx, models.BlockTypeProposal, blk.CommonBlock, blockBytes),
 			// db.indexProposalTx(ctx, blk.ID(), blk.Tx),
 		)
 		return errs.Err
 	case *platformvm.StandardBlock:
-		blockErr := db.indexCommonBlock(ctx, BlockTypeStandard, blk.CommonBlock, blockBytes)
+		blockErr := db.indexCommonBlock(ctx, models.BlockTypeStandard, blk.CommonBlock, blockBytes)
 		for _, tx := range blk.Txs {
 			dTx, ok := tx.UnsignedTx.(platformvm.UnsignedDecisionTx)
 			if !ok {
@@ -119,7 +120,7 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 		}
 		return blockErr
 	case *platformvm.AtomicBlock:
-		blockErr := db.indexCommonBlock(ctx, BlockTypeAtomic, blk.CommonBlock, blockBytes)
+		blockErr := db.indexCommonBlock(ctx, models.BlockTypeAtomic, blk.CommonBlock, blockBytes)
 		atomicTx, ok := blk.Tx.UnsignedTx.(platformvm.UnsignedAtomicTx)
 		if !ok {
 			break
@@ -129,16 +130,16 @@ func (db *DB) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
 		}
 		return blockErr
 	case *platformvm.Abort:
-		return db.indexCommonBlock(ctx, BlockTypeAbort, blk.CommonBlock, blockBytes)
+		return db.indexCommonBlock(ctx, models.BlockTypeAbort, blk.CommonBlock, blockBytes)
 	case *platformvm.Commit:
-		return db.indexCommonBlock(ctx, BlockTypeCommit, blk.CommonBlock, blockBytes)
+		return db.indexCommonBlock(ctx, models.BlockTypeCommit, blk.CommonBlock, blockBytes)
 	default:
 		ctx.Job().EventErr("index_block", ErrUnknownBlockType)
 	}
 	return nil
 }
 
-func (db *DB) indexCommonBlock(ctx services.ConsumerCtx, blkType BlockType, blk platformvm.CommonBlock, blockBytes []byte) error {
+func (db *DB) indexCommonBlock(ctx services.ConsumerCtx, blkType models.BlockType, blk platformvm.CommonBlock, blockBytes []byte) error {
 	blkID := ids.NewID(hashing.ComputeHash256Array(blockBytes))
 
 	_, err := ctx.DB().
@@ -156,7 +157,7 @@ func (db *DB) indexCommonBlock(ctx services.ConsumerCtx, blkType BlockType, blk 
 	return nil
 }
 
-func (db *DB) indexTransaction(ctx services.ConsumerCtx, blockID ids.ID, txType TransactionType, id ids.ID) error {
+func (db *DB) indexTransaction(ctx services.ConsumerCtx, blockID ids.ID, txType models.TransactionType, id ids.ID) error {
 	_, err := ctx.DB().
 		InsertInto("pvm_transactions").
 		Pair("id", id.String()).
@@ -234,9 +235,9 @@ func (db *DB) indexAtomicTx(ctx services.ConsumerCtx, blockID ids.ID, atomicTx p
 
 	switch atomicTx.(type) {
 	case *platformvm.UnsignedImportTx:
-		return db.indexTransaction(ctx, blockID, TransactionTypeImport, ids.NewID(hashing.ComputeHash256Array(txBytes)))
+		return db.indexTransaction(ctx, blockID, models.TransactionTypeImport, ids.NewID(hashing.ComputeHash256Array(txBytes)))
 	case *platformvm.UnsignedExportTx:
-		return db.indexTransaction(ctx, blockID, TransactionTypeExport, ids.NewID(hashing.ComputeHash256Array(txBytes)))
+		return db.indexTransaction(ctx, blockID, models.TransactionTypeExport, ids.NewID(hashing.ComputeHash256Array(txBytes)))
 	}
 	return nil
 }
@@ -249,7 +250,7 @@ func (db *DB) indexCreateChainTx(ctx services.ConsumerCtx, blockID ids.ID, tx *p
 
 	txID := ids.NewID(hashing.ComputeHash256Array(txBytes))
 
-	err = db.indexTransaction(ctx, blockID, TransactionTypeCreateChain, txID)
+	err = db.indexTransaction(ctx, blockID, models.TransactionTypeCreateChain, txID)
 	if err != nil {
 		return err
 	}
@@ -306,7 +307,7 @@ func (db *DB) indexCreateSubnetTx(ctx services.ConsumerCtx, blockID ids.ID, tx *
 
 	txID := ids.NewID(hashing.ComputeHash256Array(txBytes))
 
-	err = db.indexTransaction(ctx, blockID, TransactionTypeCreateSubnet, txID)
+	err = db.indexTransaction(ctx, blockID, models.TransactionTypeCreateSubnet, txID)
 	if err != nil {
 		return err
 	}

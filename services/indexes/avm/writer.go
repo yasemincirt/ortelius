@@ -6,7 +6,6 @@ package avm
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/nodb"
@@ -160,11 +159,11 @@ func (w *Writer) ingestTx(ctx services.ConsumerCtx, txBytes []byte) error {
 	case *avm.OperationTx:
 		// 	db.ingestOperationTx(ctx, tx)
 	case *avm.ImportTx:
-		return w.ingestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, models.TXTypeImport)
+		return w.IngestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, models.TXTypeImport)
 	case *avm.ExportTx:
-		return w.ingestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, models.TXTypeExport)
+		return w.IngestBaseTx(ctx, txBytes, tx, &castTx.BaseTx, models.TXTypeExport)
 	case *avm.BaseTx:
-		return w.ingestBaseTx(ctx, txBytes, tx, castTx, models.TXTypeBase)
+		return w.IngestBaseTx(ctx, txBytes, tx, castTx, models.TXTypeBase)
 	default:
 		return errors.New("unknown tx type")
 	}
@@ -240,7 +239,7 @@ func (w *Writer) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, t
 				continue
 			}
 
-			w.ingestOutput(ctx, txID, outputCount-1, txID, xOut, true)
+			w.IngestOutput(ctx, txID, outputCount-1, txID, xOut, true)
 
 			amount, err = math.Add64(amount, xOut.Amount())
 			if err != nil {
@@ -260,7 +259,7 @@ func (w *Writer) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, t
 		Pair("alias", alias).
 		Pair("current_supply", amount).
 		ExecContext(ctx.Ctx())
-	if err != nil && !errIsDuplicateEntryError(err) {
+	if err != nil && !services.ErrIsDuplicateEntryError(err) {
 		return err
 	}
 
@@ -282,13 +281,13 @@ func (w *Writer) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, t
 		Pair("created_at", ctx.Time()).
 		Pair("canonical_serialization", txBytes).
 		ExecContext(ctx.Ctx())
-	if err != nil && !errIsDuplicateEntryError(err) {
+	if err != nil && !services.ErrIsDuplicateEntryError(err) {
 		return err
 	}
 	return nil
 }
 
-func (w *Writer) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx *avm.Tx, baseTx *avm.BaseTx, txType models.TransactionType) error {
+func (w *Writer) IngestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx *avm.Tx, baseTx *avm.BaseTx, txType models.TransactionType) error {
 	var (
 		err   error
 		total uint64 = 0
@@ -313,7 +312,7 @@ func (w *Writer) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx
 		redeemedOutputs = append(redeemedOutputs, inputID.String())
 
 		// Upsert this input as an output in case we haven't seen the parent tx
-		w.ingestOutput(ctx, in.UTXOID.TxID, in.UTXOID.OutputIndex, in.AssetID(), &secp256k1fx.TransferOutput{
+		w.IngestOutput(ctx, in.UTXOID.TxID, in.UTXOID.OutputIndex, in.AssetID(), &secp256k1fx.TransferOutput{
 			Amt: in.In.Amount(),
 			OutputOwners: secp256k1fx.OutputOwners{
 				// We leave Addrs blank because we ingested them above with their signatures
@@ -332,8 +331,8 @@ func (w *Writer) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx
 				return err
 			}
 
-			w.ingestAddressFromPublicKey(ctx, publicKey)
-			w.ingestOutputAddress(ctx, inputID, publicKey.Address(), sig[:])
+			w.IngestAddressFromPublicKey(ctx, publicKey)
+			w.IngestOutputAddress(ctx, inputID, publicKey.Address(), sig[:])
 		}
 	}
 
@@ -369,7 +368,7 @@ func (w *Writer) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx
 		Pair("created_at", ctx.Time()).
 		Pair("canonical_serialization", txBytes).
 		ExecContext(ctx.Ctx())
-	if err != nil && !errIsDuplicateEntryError(err) {
+	if err != nil && !services.ErrIsDuplicateEntryError(err) {
 		return err
 	}
 
@@ -379,12 +378,12 @@ func (w *Writer) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx
 		if !ok {
 			continue
 		}
-		w.ingestOutput(ctx, baseTx.ID(), uint32(idx), out.AssetID(), xOut, true)
+		w.IngestOutput(ctx, baseTx.ID(), uint32(idx), out.AssetID(), xOut, true)
 	}
 	return nil
 }
 
-func (w *Writer) ingestOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32, assetID ids.ID, out *secp256k1fx.TransferOutput, upd bool) {
+func (w *Writer) IngestOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32, assetID ids.ID, out *secp256k1fx.TransferOutput, upd bool) {
 	outputID := txID.Prefix(uint64(idx))
 
 	var err error
@@ -404,7 +403,7 @@ func (w *Writer) ingestOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32,
 
 	if err != nil {
 		// We got an error and it's not a duplicate entry error, so log it
-		if !errIsDuplicateEntryError(err) {
+		if !services.ErrIsDuplicateEntryError(err) {
 			_ = w.stream.EventErr("ingest_output.insert", err)
 			// We got a duplicate entry error and we want to update
 		} else if upd {
@@ -426,23 +425,23 @@ func (w *Writer) ingestOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32,
 	for _, addr := range out.Addresses() {
 		addrBytes := [20]byte{}
 		copy(addrBytes[:], addr)
-		w.ingestOutputAddress(ctx, outputID, ids.NewShortID(addrBytes), nil)
+		w.IngestOutputAddress(ctx, outputID, ids.NewShortID(addrBytes), nil)
 	}
 }
 
-func (w *Writer) ingestAddressFromPublicKey(ctx services.ConsumerCtx, publicKey crypto.PublicKey) {
+func (w *Writer) IngestAddressFromPublicKey(ctx services.ConsumerCtx, publicKey crypto.PublicKey) {
 	_, err := ctx.DB().
 		InsertInto("addresses").
 		Pair("address", publicKey.Address().String()).
 		Pair("public_key", publicKey.Bytes()).
 		ExecContext(ctx.Ctx())
 
-	if err != nil && !errIsDuplicateEntryError(err) {
+	if err != nil && !services.ErrIsDuplicateEntryError(err) {
 		_ = ctx.Job().EventErr("ingest_address_from_public_key", err)
 	}
 }
 
-func (w *Writer) ingestOutputAddress(ctx services.ConsumerCtx, outputID ids.ID, address ids.ShortID, sig []byte) {
+func (w *Writer) IngestOutputAddress(ctx services.ConsumerCtx, outputID ids.ID, address ids.ShortID, sig []byte) {
 	builder := ctx.DB().
 		InsertInto("avm_output_addresses").
 		Pair("output_id", outputID.String()).
@@ -456,7 +455,7 @@ func (w *Writer) ingestOutputAddress(ctx services.ConsumerCtx, outputID ids.ID, 
 	switch {
 	case err == nil:
 		return
-	case !errIsDuplicateEntryError(err):
+	case !services.ErrIsDuplicateEntryError(err):
 		_ = ctx.Job().EventErr("ingest_output_address", err)
 		return
 	case sig == nil:
@@ -472,10 +471,6 @@ func (w *Writer) ingestOutputAddress(ctx services.ConsumerCtx, outputID ids.ID, 
 		_ = ctx.Job().EventErr("ingest_output_address", err)
 		return
 	}
-}
-
-func errIsDuplicateEntryError(err error) bool {
-	return err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry")
 }
 
 func parseTx(c codec.Codec, bytes []byte) (*avm.Tx, error) {

@@ -10,6 +10,8 @@ import (
 	"github.com/ava-labs/ortelius/services/indexes/params"
 )
 
+const VMName = "pvm"
+
 type APIContext struct {
 	*api.RootRequestContext
 

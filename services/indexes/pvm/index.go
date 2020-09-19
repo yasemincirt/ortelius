@@ -53,20 +53,20 @@ func (i *Index) Consume(ctx context.Context, ingestable services.Consumable) err
 	return i.db.Consume(ctx, ingestable)
 }
 func (i *Index) Bootstrap(ctx context.Context) error { return i.db.Bootstrap(ctx) }
-func (i *Index) ListBlocks(ctx context.Context, p ListBlocksParams) (*BlockList, error) {
+func (i *Index) ListBlocks(ctx context.Context, p ListBlocksParams) (*models.BlockList, error) {
 	return i.db.ListBlocks(ctx, p)
 }
-func (i *Index) ListSubnets(ctx context.Context, p ListSubnetsParams) (*SubnetList, error) {
+func (i *Index) ListSubnets(ctx context.Context, p ListSubnetsParams) (*models.SubnetList, error) {
 	return i.db.ListSubnets(ctx, p)
 }
-func (i *Index) ListChains(ctx context.Context, p ListChainsParams) (*ChainList, error) {
+func (i *Index) ListChains(ctx context.Context, p ListChainsParams) (*models.ChainList, error) {
 	return i.db.ListChains(ctx, p)
 }
-func (i *Index) ListValidators(ctx context.Context, p ListValidatorsParams) (*ValidatorList, error) {
+func (i *Index) ListValidators(ctx context.Context, p ListValidatorsParams) (*models.ValidatorList, error) {
 	return i.db.ListValidators(ctx, p)
 }
 
-func (i *Index) GetBlock(ctx context.Context, id ids.ID) (*Block, error) {
+func (i *Index) GetBlock(ctx context.Context, id ids.ID) (*models.Block, error) {
 	list, err := i.db.ListBlocks(ctx, ListBlocksParams{ID: &id})
 	if err != nil || len(list.Blocks) == 0 {
 		return nil, err
@@ -74,7 +74,7 @@ func (i *Index) GetBlock(ctx context.Context, id ids.ID) (*Block, error) {
 	return list.Blocks[0], nil
 }
 
-func (i *Index) GetSubnet(ctx context.Context, id ids.ID) (*Subnet, error) {
+func (i *Index) GetSubnet(ctx context.Context, id ids.ID) (*models.Subnet, error) {
 	list, err := i.db.ListSubnets(ctx, ListSubnetsParams{ID: &id})
 	if err != nil || len(list.Subnets) == 0 {
 		return nil, err
@@ -82,7 +82,7 @@ func (i *Index) GetSubnet(ctx context.Context, id ids.ID) (*Subnet, error) {
 	return list.Subnets[0], nil
 }
 
-func (i *Index) GetChain(ctx context.Context, id ids.ID) (*Chain, error) {
+func (i *Index) GetChain(ctx context.Context, id ids.ID) (*models.Chain, error) {
 	list, err := i.db.ListChains(ctx, ListChainsParams{ID: &id})
 	if err != nil || len(list.Chains) == 0 {
 		return nil, err
@@ -90,7 +90,7 @@ func (i *Index) GetChain(ctx context.Context, id ids.ID) (*Chain, error) {
 	return list.Chains[0], nil
 }
 
-func (i *Index) GetValidator(ctx context.Context, id ids.ID) (*Validator, error) {
+func (i *Index) GetValidator(ctx context.Context, id ids.ID) (*models.Validator, error) {
 	list, err := i.ListValidators(ctx, ListValidatorsParams{ID: &id})
 	if err != nil || len(list.Validators) == 0 {
 		return nil, err

@@ -9,8 +9,8 @@ import (
 	"github.com/ava-labs/ortelius/services/indexes/models"
 )
 
-func (db *DB) ListBlocks(ctx context.Context, params ListBlocksParams) (*BlockList, error) {
-	blocks := []*Block{}
+func (db *DB) ListBlocks(ctx context.Context, params ListBlocksParams) (*models.BlockList, error) {
+	blocks := []*models.Block{}
 
 	_, err := params.Apply(db.newSession("list_blocks").
 		Select("id", "type", "parent_id", "chain_id", "created_at").
@@ -20,11 +20,11 @@ func (db *DB) ListBlocks(ctx context.Context, params ListBlocksParams) (*BlockLi
 	if err != nil {
 		return nil, err
 	}
-	return &BlockList{Blocks: blocks}, nil
+	return &models.BlockList{Blocks: blocks}, nil
 }
 
-func (db *DB) ListSubnets(ctx context.Context, params ListSubnetsParams) (*SubnetList, error) {
-	subnets := []*Subnet{}
+func (db *DB) ListSubnets(ctx context.Context, params ListSubnetsParams) (*models.SubnetList, error) {
+	subnets := []*models.Subnet{}
 	_, err := params.Apply(db.newSession("list_subnets").
 		Select("id", "network_id", "threshold", "created_at").
 		From("pvm_subnets")).
@@ -37,11 +37,11 @@ func (db *DB) ListSubnets(ctx context.Context, params ListSubnetsParams) (*Subne
 		return nil, err
 	}
 
-	return &SubnetList{Subnets: subnets}, nil
+	return &models.SubnetList{Subnets: subnets}, nil
 }
 
-func (db *DB) ListValidators(ctx context.Context, params ListValidatorsParams) (*ValidatorList, error) {
-	validators := []*Validator{}
+func (db *DB) ListValidators(ctx context.Context, params ListValidatorsParams) (*models.ValidatorList, error) {
+	validators := []*models.Validator{}
 
 	_, err := params.Apply(db.newSession("list_blocks").
 		Select("transaction_id", "node_id", "weight", "start_time", "end_time", "destination", "shares", "subnet_id").
@@ -51,11 +51,11 @@ func (db *DB) ListValidators(ctx context.Context, params ListValidatorsParams) (
 	if err != nil {
 		return nil, err
 	}
-	return &ValidatorList{Validators: validators}, nil
+	return &models.ValidatorList{Validators: validators}, nil
 }
 
-func (db *DB) ListChains(ctx context.Context, params ListChainsParams) (*ChainList, error) {
-	chains := []*Chain{}
+func (db *DB) ListChains(ctx context.Context, params ListChainsParams) (*models.ChainList, error) {
+	chains := []*models.Chain{}
 
 	_, err := params.Apply(db.newSession("list_chains").
 		Select("id", "network_id", "subnet_id", "name", "vm_id", "genesis_data", "created_at").
@@ -72,25 +72,25 @@ func (db *DB) ListChains(ctx context.Context, params ListChainsParams) (*ChainLi
 		return nil, err
 	}
 
-	return &ChainList{Chains: chains}, nil
+	return &models.ChainList{Chains: chains}, nil
 }
 
-func (db *DB) loadControlKeys(ctx context.Context, subnets []*Subnet) error {
+func (db *DB) loadControlKeys(ctx context.Context, subnets []*models.Subnet) error {
 	if len(subnets) < 1 {
 		return nil
 	}
 
-	subnetMap := make(map[models.StringID]*Subnet, len(subnets))
+	subnetMap := make(map[models.StringID]*models.Subnet, len(subnets))
 	ids := make([]models.StringID, len(subnets))
 	for i, s := range subnets {
 		ids[i] = s.ID
 		subnetMap[s.ID] = s
-		s.ControlKeys = []ControlKey{}
+		s.ControlKeys = []models.ControlKey{}
 	}
 
 	keys := []struct {
 		SubnetID models.StringID
-		Key      ControlKey
+		Key      models.ControlKey
 	}{}
 	_, err := db.newSession("load_control_keys").
 		Select("subnet_id", "address", "public_key").
@@ -110,22 +110,22 @@ func (db *DB) loadControlKeys(ctx context.Context, subnets []*Subnet) error {
 	return nil
 }
 
-func (db *DB) loadControlSignatures(ctx context.Context, chains []*Chain) error {
+func (db *DB) loadControlSignatures(ctx context.Context, chains []*models.Chain) error {
 	if len(chains) < 1 {
 		return nil
 	}
 
-	chainMap := make(map[models.StringID]*Chain, len(chains))
+	chainMap := make(map[models.StringID]*models.Chain, len(chains))
 	ids := make([]models.StringID, len(chains))
 	for i, c := range chains {
 		ids[i] = c.ID
 		chainMap[c.ID] = c
-		c.ControlSignatures = []ControlSignature{}
+		c.ControlSignatures = []models.ControlSignature{}
 	}
 
 	sigs := []struct {
 		ChainID   models.StringID
-		Signature ControlSignature
+		Signature models.ControlSignature
 	}{}
 	_, err := db.newSession("load_control_signatures").
 		Select("chain_id", "signature").
@@ -145,12 +145,12 @@ func (db *DB) loadControlSignatures(ctx context.Context, chains []*Chain) error 
 	return nil
 }
 
-func (db *DB) loadFXIDs(ctx context.Context, chains []*Chain) error {
+func (db *DB) loadFXIDs(ctx context.Context, chains []*models.Chain) error {
 	if len(chains) < 1 {
 		return nil
 	}
 
-	chainMap := make(map[models.StringID]*Chain, len(chains))
+	chainMap := make(map[models.StringID]*models.Chain, len(chains))
 	ids := make([]models.StringID, len(chains))
 	for i, c := range chains {
 		ids[i] = c.ID

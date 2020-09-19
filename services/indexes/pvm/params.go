@@ -8,6 +8,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 
+	"github.com/ava-labs/ortelius/services/indexes/models"
 	"github.com/ava-labs/ortelius/services/indexes/params"
 )
 
@@ -21,7 +22,7 @@ type ListBlocksParams struct {
 	params.ListParams
 
 	ID        *ids.ID
-	Types     []BlockType
+	Types     []models.BlockType
 	StartTime time.Time
 	EndTime   time.Time
 	Sort      BlockSort
