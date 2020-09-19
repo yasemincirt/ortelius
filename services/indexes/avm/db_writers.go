@@ -19,6 +19,7 @@ import (
 	"github.com/gocraft/health"
 
 	"github.com/ava-labs/ortelius/services"
+	"github.com/ava-labs/ortelius/services/indexes/models"
 )
 
 const (
@@ -219,7 +220,7 @@ func (db *DB) ingestCreateAssetTx(ctx services.ConsumerCtx, txBytes []byte, tx *
 	return nil
 }
 
-func (db *DB) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx *avm.Tx, baseTx *avm.BaseTx, txType TransactionType) error {
+func (db *DB) ingestBaseTx(ctx services.ConsumerCtx, txBytes []byte, uniqueTx *avm.Tx, baseTx *avm.BaseTx, txType models.TransactionType) error {
 	var (
 		err   error
 		total uint64 = 0
