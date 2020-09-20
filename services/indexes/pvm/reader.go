@@ -6,13 +6,29 @@ package pvm
 import (
 	"context"
 
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/gocraft/health"
+
+	"github.com/ava-labs/ortelius/services"
 	"github.com/ava-labs/ortelius/services/indexes/models"
 )
 
-func (db *DB) ListBlocks(ctx context.Context, params ListBlocksParams) (*models.BlockList, error) {
+type Reader struct {
+	stream *health.Stream
+	db     *services.DB
+}
+
+func NewReader(conns *services.Connections) *Reader {
+	return &Reader{
+		stream: conns.Stream(),
+		db:     services.NewDB(conns.Stream(), conns.DB()),
+	}
+}
+
+func (r *Reader) ListBlocks(ctx context.Context, params ListBlocksParams) (*models.BlockList, error) {
 	blocks := []*models.Block{}
 
-	_, err := params.Apply(db.newSession("list_blocks").
+	_, err := params.Apply(r.db.NewSession("list_blocks").
 		Select("id", "type", "parent_id", "chain_id", "created_at").
 		From("pvm_blocks")).
 		LoadContext(ctx, &blocks)
@@ -23,9 +39,9 @@ func (db *DB) ListBlocks(ctx context.Context, params ListBlocksParams) (*models.
 	return &models.BlockList{Blocks: blocks}, nil
 }
 
-func (db *DB) ListSubnets(ctx context.Context, params ListSubnetsParams) (*models.SubnetList, error) {
+func (r *Reader) ListSubnets(ctx context.Context, params ListSubnetsParams) (*models.SubnetList, error) {
 	subnets := []*models.Subnet{}
-	_, err := params.Apply(db.newSession("list_subnets").
+	_, err := params.Apply(r.db.NewSession("list_subnets").
 		Select("id", "network_id", "threshold", "created_at").
 		From("pvm_subnets")).
 		LoadContext(ctx, &subnets)
@@ -33,17 +49,17 @@ func (db *DB) ListSubnets(ctx context.Context, params ListSubnetsParams) (*model
 		return nil, err
 	}
 
-	if err = db.loadControlKeys(ctx, subnets); err != nil {
+	if err = r.loadControlKeys(ctx, subnets); err != nil {
 		return nil, err
 	}
 
 	return &models.SubnetList{Subnets: subnets}, nil
 }
 
-func (db *DB) ListValidators(ctx context.Context, params ListValidatorsParams) (*models.ValidatorList, error) {
+func (r *Reader) ListValidators(ctx context.Context, params ListValidatorsParams) (*models.ValidatorList, error) {
 	validators := []*models.Validator{}
 
-	_, err := params.Apply(db.newSession("list_blocks").
+	_, err := params.Apply(r.db.NewSession("list_blocks").
 		Select("transaction_id", "node_id", "weight", "start_time", "end_time", "destination", "shares", "subnet_id").
 		From("pvm_validators")).
 		LoadContext(ctx, &validators)
@@ -54,10 +70,10 @@ func (db *DB) ListValidators(ctx context.Context, params ListValidatorsParams) (
 	return &models.ValidatorList{Validators: validators}, nil
 }
 
-func (db *DB) ListChains(ctx context.Context, params ListChainsParams) (*models.ChainList, error) {
+func (r *Reader) ListChains(ctx context.Context, params ListChainsParams) (*models.ChainList, error) {
 	chains := []*models.Chain{}
 
-	_, err := params.Apply(db.newSession("list_chains").
+	_, err := params.Apply(r.db.NewSession("list_chains").
 		Select("id", "network_id", "subnet_id", "name", "vm_id", "genesis_data", "created_at").
 		From("pvm_chains")).
 		LoadContext(ctx, &chains)
@@ -65,17 +81,49 @@ func (db *DB) ListChains(ctx context.Context, params ListChainsParams) (*models.
 		return nil, err
 	}
 
-	if err = db.loadFXIDs(ctx, chains); err != nil {
+	if err = r.loadFXIDs(ctx, chains); err != nil {
 		return nil, err
 	}
-	if err = db.loadControlSignatures(ctx, chains); err != nil {
+	if err = r.loadControlSignatures(ctx, chains); err != nil {
 		return nil, err
 	}
 
 	return &models.ChainList{Chains: chains}, nil
 }
 
-func (db *DB) loadControlKeys(ctx context.Context, subnets []*models.Subnet) error {
+func (r *Reader) GetBlock(ctx context.Context, id ids.ID) (*models.Block, error) {
+	list, err := r.ListBlocks(ctx, ListBlocksParams{ID: &id})
+	if err != nil || len(list.Blocks) == 0 {
+		return nil, err
+	}
+	return list.Blocks[0], nil
+}
+
+func (r *Reader) GetSubnet(ctx context.Context, id ids.ID) (*models.Subnet, error) {
+	list, err := r.ListSubnets(ctx, ListSubnetsParams{ID: &id})
+	if err != nil || len(list.Subnets) == 0 {
+		return nil, err
+	}
+	return list.Subnets[0], nil
+}
+
+func (r *Reader) GetChain(ctx context.Context, id ids.ID) (*models.Chain, error) {
+	list, err := r.ListChains(ctx, ListChainsParams{ID: &id})
+	if err != nil || len(list.Chains) == 0 {
+		return nil, err
+	}
+	return list.Chains[0], nil
+}
+
+func (r *Reader) GetValidator(ctx context.Context, id ids.ID) (*models.Validator, error) {
+	list, err := r.ListValidators(ctx, ListValidatorsParams{ID: &id})
+	if err != nil || len(list.Validators) == 0 {
+		return nil, err
+	}
+	return list.Validators[0], nil
+}
+
+func (r *Reader) loadControlKeys(ctx context.Context, subnets []*models.Subnet) error {
 	if len(subnets) < 1 {
 		return nil
 	}
@@ -92,7 +140,7 @@ func (db *DB) loadControlKeys(ctx context.Context, subnets []*models.Subnet) err
 		SubnetID models.StringID
 		Key      models.ControlKey
 	}{}
-	_, err := db.newSession("load_control_keys").
+	_, err := r.db.NewSession("load_control_keys").
 		Select("subnet_id", "address", "public_key").
 		From("pvm_subnet_control_keys").
 		Where("pvm_subnet_control_keys.subnet_id IN ?", ids).
@@ -110,7 +158,7 @@ func (db *DB) loadControlKeys(ctx context.Context, subnets []*models.Subnet) err
 	return nil
 }
 
-func (db *DB) loadControlSignatures(ctx context.Context, chains []*models.Chain) error {
+func (r *Reader) loadControlSignatures(ctx context.Context, chains []*models.Chain) error {
 	if len(chains) < 1 {
 		return nil
 	}
@@ -127,7 +175,7 @@ func (db *DB) loadControlSignatures(ctx context.Context, chains []*models.Chain)
 		ChainID   models.StringID
 		Signature models.ControlSignature
 	}{}
-	_, err := db.newSession("load_control_signatures").
+	_, err := r.db.NewSession("load_control_signatures").
 		Select("chain_id", "signature").
 		From("pvm_chains_control_signatures").
 		Where("pvm_chains_control_signatures.chain_id IN ?", ids).
@@ -145,7 +193,7 @@ func (db *DB) loadControlSignatures(ctx context.Context, chains []*models.Chain)
 	return nil
 }
 
-func (db *DB) loadFXIDs(ctx context.Context, chains []*models.Chain) error {
+func (r *Reader) loadFXIDs(ctx context.Context, chains []*models.Chain) error {
 	if len(chains) < 1 {
 		return nil
 	}
@@ -160,9 +208,9 @@ func (db *DB) loadFXIDs(ctx context.Context, chains []*models.Chain) error {
 
 	fxIDs := []struct {
 		ChainID models.StringID
-		FXID    models.StringID `db:"fx_id"`
+		FXID    models.StringID `r:"fx_id"`
 	}{}
-	_, err := db.newSession("load_control_signatures").
+	_, err := r.db.NewSession("load_control_signatures").
 		Select("chain_id", "fx_id").
 		From("pvm_chains_fx_ids").
 		Where("pvm_chains_fx_ids.chain_id IN ?", ids).

@@ -7,31 +7,14 @@ import (
 	"time"
 )
 
-const (
-	BlockTypeProposal BlockType = iota
-	BlockTypeAbort
-	BlockTypeCommit
-	BlockTypeStandard
-	BlockTypeAtomic
-)
-
-const (
-	// Timed
-	TransactionTypeAddDefaultSubnetValidator TransactionType = (iota * 2) + 11
-	TransactionTypeAddNonDefaultSubnetValidator
-	TransactionTypeAddDefaultSubnetDelegator
-
-	// Decision
-	TransactionTypeCreateChain
-	TransactionTypeCreateSubnet
-
-	// Atomic
-	TransactionTypeImport
-	TransactionTypeExport
-)
-
-type BlockType uint8
-type TransactionType uint8
+// const (
+// 	BlockTypeProposal BlockType = iota
+// 	BlockTypeAbort
+// 	BlockTypeCommit
+// 	BlockTypeStandard
+// 	BlockTypeAtomic
+// )
+//
 
 type Block struct {
 	ID        StringID  `json:"id"`

@@ -35,11 +35,11 @@ func NewDBIndex(stream *health.Stream, db *dbr.Connection, networkID uint32, cha
 	}
 }
 
-func (db *DB) Close(context.Context) error {
-	db.stream.Event("close")
-	return db.db.Close()
+func (r *DB) Close(context.Context) error {
+	r.stream.Event("close")
+	return r.db.Close()
 }
 
-func (db *DB) newSession(name string) *dbr.Session {
-	return db.db.NewSession(db.stream.NewJob(name))
+func (r *DB) newSession(name string) *dbr.Session {
+	return r.db.NewSession(r.stream.NewJob(name))
 }

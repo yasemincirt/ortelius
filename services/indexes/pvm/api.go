@@ -12,31 +12,32 @@ import (
 
 const VMName = "pvm"
 
+func init() {
+	api.RegisterRouter(VMName, NewAPIRouter, APIContext{})
+}
+
 type APIContext struct {
 	*api.RootRequestContext
 
-	index      *Index
+	reader     *Reader
 	networkID  uint32
 	chainAlias string
 }
 
 func NewAPIRouter(params api.RouterParams) error {
-	index, err := New(params.ServiceConfig, params.NetworkID, params.ChainConfig.ID)
-	if err != nil {
-		return err
-	}
+	reader := NewReader(params.Connections)
 
 	params.Router.
 		// Setup the context for each request
 		Middleware(func(c *APIContext, w web.ResponseWriter, r *web.Request, next web.NextMiddlewareFunc) {
-			c.index = index
+			c.reader = reader
 			c.networkID = params.NetworkID
 			c.chainAlias = params.ChainConfig.Alias
 			next(w, r)
 		}).
 
 		// General routes
-		Get("/", (*APIContext).Overview).
+		// Get("/", (*APIContext).Overview).
 
 		// List and Get routes
 		Get("/blocks", (*APIContext).ListBlocks).
@@ -51,15 +52,15 @@ func NewAPIRouter(params api.RouterParams) error {
 	return nil
 }
 
-func (c *APIContext) Overview(w web.ResponseWriter, _ *web.Request) {
-	overview, err := c.index.GetChainInfo(c.chainAlias, c.networkID)
-	if err != nil {
-		api.WriteErr(w, 500, err.Error())
-		return
-	}
-
-	api.WriteObject(w, overview)
-}
+// func (c *APIContext) Overview(w web.ResponseWriter, _ *web.Request) {
+// 	overview, err := c.reader.GetChainInfo(c.chainAlias, c.networkID)
+// 	if err != nil {
+// 		api.WriteErr(w, 500, err.Error())
+// 		return
+// 	}
+//
+// 	api.WriteObject(w, overview)
+// }
 
 func (c *APIContext) ListBlocks(w web.ResponseWriter, r *web.Request) {
 	p := &params.ListParams{}
@@ -68,7 +69,7 @@ func (c *APIContext) ListBlocks(w web.ResponseWriter, r *web.Request) {
 		return
 	}
 
-	blocks, err := c.index.ListBlocks(c.Ctx(), ListBlocksParams{ListParams: *p})
+	blocks, err := c.reader.ListBlocks(c.Ctx(), ListBlocksParams{ListParams: *p})
 	if err != nil {
 		api.WriteErr(w, 500, err.Error())
 		return
@@ -84,7 +85,7 @@ func (c *APIContext) ListSubnets(w web.ResponseWriter, r *web.Request) {
 		return
 	}
 
-	blocks, err := c.index.ListSubnets(c.Ctx(), ListSubnetsParams{ListParams: *p})
+	blocks, err := c.reader.ListSubnets(c.Ctx(), ListSubnetsParams{ListParams: *p})
 	if err != nil {
 		api.WriteErr(w, 500, err.Error())
 		return
@@ -100,7 +101,7 @@ func (c *APIContext) ListValidators(w web.ResponseWriter, r *web.Request) {
 		return
 	}
 
-	blocks, err := c.index.ListValidators(c.Ctx(), ListValidatorsParams{ListParams: *p})
+	blocks, err := c.reader.ListValidators(c.Ctx(), ListValidatorsParams{ListParams: *p})
 	if err != nil {
 		api.WriteErr(w, 500, err.Error())
 		return
@@ -116,7 +117,7 @@ func (c *APIContext) ListChains(w web.ResponseWriter, r *web.Request) {
 		return
 	}
 
-	blocks, err := c.index.ListChains(c.Ctx(), ListChainsParams{ListParams: *p})
+	blocks, err := c.reader.ListChains(c.Ctx(), ListChainsParams{ListParams: *p})
 	if err != nil {
 		api.WriteErr(w, 500, err.Error())
 		return
