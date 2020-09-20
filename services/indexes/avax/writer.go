@@ -7,6 +7,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/math"
+	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
@@ -106,7 +107,7 @@ func (w *Writer) InsertTransaction(ctx services.ConsumerCtx, txBytes []byte, uns
 		InsertInto("avm_transactions").
 		Pair("id", baseTx.ID().String()).
 		Pair("chain_id", baseTx.BlockchainID.String()).
-		Pair("type", txType).
+		Pair("type", txType.String()).
 		Pair("memo", baseTx.Memo).
 		Pair("created_at", ctx.Time()).
 		Pair("canonical_serialization", txBytes).
@@ -126,9 +127,9 @@ func (w *Writer) InsertTransaction(ctx services.ConsumerCtx, txBytes []byte, uns
 	return nil
 }
 
-func (w *Writer) InsertOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32, assetID ids.ID, out verify.State, upd bool) {
+func (w *Writer) InsertOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32, assetID ids.ID, out verify.State, upd bool) error {
 	var (
-		err      error
+		errs     wrappers.Errs
 		outputID = txID.Prefix(uint64(idx))
 
 		amount    uint64
@@ -153,7 +154,7 @@ func (w *Writer) InsertOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32,
 		}
 	}
 
-	_, err = ctx.DB().
+	_, err := ctx.DB().
 		InsertInto("avm_outputs").
 		Pair("id", outputID.String()).
 		Pair("chain_id", w.chainID).
@@ -170,6 +171,7 @@ func (w *Writer) InsertOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32,
 		// We got an error and it's not a duplicate entry error, so log it
 		if !services.ErrIsDuplicateEntryError(err) {
 			_ = w.stream.EventErr("ingest_output.insert", err)
+			errs.Add(err)
 			// We got a duplicate entry error and we want to update
 		} else if upd {
 			if _, err = ctx.DB().
@@ -180,11 +182,13 @@ func (w *Writer) InsertOutput(ctx services.ConsumerCtx, txID ids.ID, idx uint32,
 				Set("locktime", locktime).
 				Set("threshold", threshold).
 				Where("avm_outputs.id = ?", outputID.String()).
-				ExecContext(ctx.Ctx()); err != nil {
+				ExecContext(ctx.Ctx()); err != nil && !services.ErrIsDuplicateEntryError(err) {
 				_ = w.stream.EventErr("ingest_output.update", err)
+				errs.Add(err)
 			}
 		}
 	}
+	return errs.Err
 }
 
 func (w *Writer) IngestAddressFromPublicKey(ctx services.ConsumerCtx, publicKey crypto.PublicKey) {

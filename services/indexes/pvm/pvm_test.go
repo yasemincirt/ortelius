@@ -2,13 +2,10 @@ package pvm
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/alicebob/miniredis"
-	// "github.com/alicebob/miniredis"
-	// "github.com/ava-labs/avalanche-go/vms/platformvm"
-	"github.com/ava-labs/avalanchego/ids"
+	"github.com/gocraft/health"
 
 	"github.com/ava-labs/ortelius/cfg"
 )
@@ -16,15 +13,12 @@ import (
 const testNetworkID = 0
 
 func TestBootstrap(t *testing.T) {
-	id, err := ids.FromString("11111111111111111111111111111111LpoYY")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(id.Bytes())
-
 	w, closeFn := newTestWriter(t)
-	w.Bootstrap(context.Background())
-	closeFn()
+	defer closeFn()
+
+	if err := w.Bootstrap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func newTestWriter(t *testing.T) (*Writer, func()) {
@@ -48,6 +42,9 @@ func newTestWriter(t *testing.T) (*Writer, func()) {
 	if err != nil {
 		t.Fatal("Failed to bootstrap index:", err.Error())
 	}
+
+	w.stream = health.NewStream()
+
 	return w, func() {
 		s.Close()
 		w.Close(context.Background())

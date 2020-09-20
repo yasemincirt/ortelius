@@ -4,9 +4,13 @@
 package pvm
 
 import (
+	"context"
+	"time"
+
 	"github.com/gocraft/web"
 
 	"github.com/ava-labs/ortelius/api"
+	"github.com/ava-labs/ortelius/services/indexes/avm"
 	"github.com/ava-labs/ortelius/services/indexes/params"
 )
 
@@ -19,18 +23,23 @@ func init() {
 type APIContext struct {
 	*api.RootRequestContext
 
-	reader     *Reader
 	networkID  uint32
 	chainAlias string
+
+	reader     *Reader
+	avaxReader *avm.Reader
 }
 
 func NewAPIRouter(params api.RouterParams) error {
 	reader := NewReader(params.Connections)
+	avaxReader := avm.NewReader(params.Connections, ChainID.String())
 
 	params.Router.
 		// Setup the context for each request
 		Middleware(func(c *APIContext, w web.ResponseWriter, r *web.Request, next web.NextMiddlewareFunc) {
 			c.reader = reader
+			c.avaxReader = avaxReader
+
 			c.networkID = params.NetworkID
 			c.chainAlias = params.ChainConfig.Alias
 			next(w, r)
@@ -40,6 +49,7 @@ func NewAPIRouter(params api.RouterParams) error {
 		// Get("/", (*APIContext).Overview).
 
 		// List and Get routes
+		Get("/transactions", (*APIContext).ListTransactions).
 		Get("/blocks", (*APIContext).ListBlocks).
 		// Get("/blocks/:id", (*APIContext).GetBlock).
 		Get("/subnets", (*APIContext).ListSubnets).
@@ -61,6 +71,26 @@ func NewAPIRouter(params api.RouterParams) error {
 //
 // 	api.WriteObject(w, overview)
 // }
+
+func (c *APIContext) ListTransactions(w web.ResponseWriter, r *web.Request) {
+	p := &params.ListTransactionsParams{}
+	if err := p.ForValues(r.URL.Query()); err != nil {
+		c.WriteErr(w, 400, err)
+		return
+	}
+
+	c.WriteCacheable(w, api.Cachable{
+		TTL: 5 * time.Second,
+		Key: c.cacheKeyForParams("list_transactions", p),
+		CachableFn: func(ctx context.Context) (interface{}, error) {
+			return c.avaxReader.ListTransactions(ctx, p)
+		},
+	})
+}
+
+func (c *APIContext) cacheKeyForParams(name string, p params.Param) []string {
+	return append([]string{"pvm", name}, p.CacheKey()...)
+}
 
 func (c *APIContext) ListBlocks(w web.ResponseWriter, r *web.Request) {
 	p := &params.ListParams{}

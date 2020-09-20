@@ -6,7 +6,6 @@ package pvm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/ava-labs/avalanchego/genesis"
@@ -18,7 +17,6 @@ import (
 	"github.com/gocraft/dbr/v2"
 	"github.com/gocraft/health"
 
-	"github.com/ava-labs/ortelius/cfg"
 	"github.com/ava-labs/ortelius/services"
 	avaxIndexer "github.com/ava-labs/ortelius/services/indexes/avax"
 	"github.com/ava-labs/ortelius/services/indexes/models"
@@ -37,21 +35,13 @@ type Writer struct {
 	avax      *avaxIndexer.Writer
 }
 
-func NewWriter(conf cfg.Services, networkID uint32) (*Writer, error) {
-	conns, err := services.NewConnectionsFromConfig(conf)
-	if err != nil {
-		return nil, err
-	}
-	return newForConnections(conns, networkID), nil
-}
-
-func newForConnections(conns *services.Connections, networkID uint32) *Writer {
+func NewWriter(conns *services.Connections, networkID uint32) (*Writer, error) {
 	return &Writer{
 		networkID: networkID,
 		stream:    conns.Stream(),
 		db:        conns.DB(),
 		avax:      avaxIndexer.NewWriter(ChainID.String(), conns.Stream()),
-	}
+	}, nil
 }
 
 func (*Writer) Name() string { return "pvm-index" }
@@ -81,63 +71,47 @@ func (w *Writer) Consume(ctx context.Context, c services.Consumable) error {
 }
 
 func (w *Writer) Bootstrap(ctx context.Context) error {
+	job := w.stream.NewJob("bootstrap")
+
 	genesisBytes, _, err := genesis.Genesis(w.networkID)
 	if err != nil {
 		return err
 	}
 
 	platformGenesis := &platformvm.Genesis{}
-	if err := platformvm.Codec.Unmarshal(genesisBytes, platformGenesis); err != nil {
+	if err := platformvm.GenesisCodec.Unmarshal(genesisBytes, platformGenesis); err != nil {
 		return err
 	}
-
 	if err = platformGenesis.Initialize(); err != nil {
 		return err
 	}
 
-	job := w.stream.NewJob("bootstrap")
-	sess := w.db.NewSession(job)
-	dbTx, err := sess.Begin()
-	if err != nil {
-		return err
-	}
-	defer dbTx.RollbackUnlessCommitted()
-
-	cCtx := services.NewConsumerContext(ctx, job, dbTx, int64(platformGenesis.Timestamp))
+	var (
+		db   = w.db.NewSession(job)
+		errs = wrappers.Errs{}
+		cCtx = services.NewConsumerContext(ctx, job, db, int64(platformGenesis.Timestamp))
+	)
 
 	for idx, utxo := range platformGenesis.UTXOs {
-		fmt.Println("calling InsertOutput...", idx)
-		w.avax.InsertOutput(cCtx, ChainID, uint32(idx), utxo.AssetID(), utxo.Out, false)
-	}
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
 
+		errs.Add(w.avax.InsertOutput(cCtx, ChainID, uint32(idx), utxo.AssetID(), utxo.Out, false))
+	}
 	for _, tx := range append(platformGenesis.Validators, platformGenesis.Chains...) {
-		w.indexTransaction(cCtx, ChainID, *tx)
+		select {
+		case <-ctx.Done():
+			break
+		default:
+		}
+
+		errs.Add(w.indexTransaction(cCtx, ChainID, *tx))
 	}
 
-	// for _, tx := range pvmGenesis.Chains {
-	// 	w.indexTransaction(cCtx, ChainID)
-	// 	createChainTx, ok := tx.UnsignedTx.(*platformvm.UnsignedCreateChainTx)
-	// 	if !ok {
-	// 		continue
-	// 	}
-	// 	err = w.indexCreateChainTx(cCtx, ChainID, createChainTx)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-	//
-	// for _, tx := range pvmGenesis.Validators {
-	// 	addValidatorTx, ok := tx.UnsignedTx.(platformvm.UnsignedProposalTx)
-	// 	if !ok {
-	// 		continue
-	// 	}
-	// 	err = w.indexProposalTx(cCtx, blockID, addValidatorTx)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	return dbTx.Commit()
+	return errs.Err
 }
 
 func (w *Writer) indexBlock(ctx services.ConsumerCtx, blockBytes []byte) error {
